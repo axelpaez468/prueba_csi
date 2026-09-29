@@ -1,0 +1,91 @@
+# Pruebas manuales de la API (VS Code: extensión REST Client; Visual Studio / Rider: soporte nativo).
+# Local con dotnet run: http://localhost:5080  |  Docker: el puerto publicado en docker-compose.
+@baseUrl = http://localhost:5080
+
+### 1. Login como vendedor
+# @name loginVendedor
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{ "username": "vendedor", "password": "Vendedor123!" }
+
+### 2. Login como admin
+# @name loginAdmin
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{ "username": "admin", "password": "Admin123!" }
+
+### 3. Login con credenciales inválidas -> 401 { "error": ... }
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{ "username": "vendedor", "password": "incorrecta" }
+
+### 4. Catálogo (requiere token)
+GET {{baseUrl}}/api/productos
+Authorization: Bearer {{loginVendedor.response.body.token}}
+
+### 5. Catálogo sin token -> 401
+GET {{baseUrl}}/api/productos
+
+### 6. Crear pedido. El precio y el total enviados se IGNORAN: el servidor usa los de la BD.
+# @name crearPedido
+POST {{baseUrl}}/api/pedidos
+Content-Type: application/json
+Authorization: Bearer {{loginVendedor.response.body.token}}
+
+{
+  "lineas": [
+    { "productoId": 1, "cantidad": 2, "precio": 0.01 },
+    { "productoId": 2, "cantidad": 1 }
+  ],
+  "total": 0.01
+}
+
+### 7. Consultar el pedido recién creado (dueño)
+GET {{baseUrl}}/api/pedidos/{{crearPedido.response.body.numero}}
+Authorization: Bearer {{loginVendedor.response.body.token}}
+
+### 8. Consultar el mismo pedido como ADMIN
+GET {{baseUrl}}/api/pedidos/{{crearPedido.response.body.numero}}
+Authorization: Bearer {{loginAdmin.response.body.token}}
+
+### 9. ADMIN no puede crear pedidos (solo VENDEDOR) -> 403
+POST {{baseUrl}}/api/pedidos
+Content-Type: application/json
+Authorization: Bearer {{loginAdmin.response.body.token}}
+
+{ "lineas": [ { "productoId": 1, "cantidad": 1 } ] }
+
+### 10. Cantidad inválida -> 400
+POST {{baseUrl}}/api/pedidos
+Content-Type: application/json
+Authorization: Bearer {{loginVendedor.response.body.token}}
+
+{ "lineas": [ { "productoId": 1, "cantidad": 0 } ] }
+
+### 11. Producto duplicado -> 400
+POST {{baseUrl}}/api/pedidos
+Content-Type: application/json
+Authorization: Bearer {{loginVendedor.response.body.token}}
+
+{ "lineas": [ { "productoId": 1, "cantidad": 1 }, { "productoId": 1, "cantidad": 2 } ] }
+
+### 12. Producto inexistente -> 400
+POST {{baseUrl}}/api/pedidos
+Content-Type: application/json
+Authorization: Bearer {{loginVendedor.response.body.token}}
+
+{ "lineas": [ { "productoId": 9999, "cantidad": 1 } ] }
+
+### 13. Stock insuficiente (Monitor tiene stock 1) -> 400
+POST {{baseUrl}}/api/pedidos
+Content-Type: application/json
+Authorization: Bearer {{loginVendedor.response.body.token}}
+
+{ "lineas": [ { "productoId": 3, "cantidad": 5 } ] }
+
+### 14. Pedido inexistente o ajeno -> 404
+GET {{baseUrl}}/api/pedidos/999999
+Authorization: Bearer {{loginVendedor.response.body.token}}
