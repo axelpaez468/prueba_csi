@@ -1,0 +1,58 @@
+# Uso:  cp .env.example .env   (y cambiar los valores)
+#       docker compose up --build
+# Frontend: http://localhost:8080   API: http://localhost:5080
+name: pedidos
+
+services:
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: Developer
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:?Defina MSSQL_SA_PASSWORD en .env}
+      DB_NAME: ${DB_NAME:-PedidosDb}
+      APP_DB_USER: ${APP_DB_USER:-pedidos_app}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?Defina APP_DB_PASSWORD en .env}
+    # Arranca SQL Server y aplica db/init/init.sql (esquema + semilla + login de la app).
+    entrypoint: ["/bin/bash", "/db/entrypoint.sh"]
+    volumes:
+      - mssql-data:/var/opt/mssql
+      - ./db:/db:ro
+    healthcheck:
+      test: ["CMD", "/bin/bash", "/db/healthcheck.sh"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+      start_period: 40s
+    restart: unless-stopped
+    # Sin puerto publicado: solo la API accede a la base de datos, por la red interna de compose.
+
+  api:
+    build: ./backend
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      # La API usa el login de mínimos privilegios, no "sa".
+      ConnectionStrings__Default: "Server=db,1433;Database=${DB_NAME:-PedidosDb};User Id=${APP_DB_USER:-pedidos_app};Password=${APP_DB_PASSWORD};Encrypt=True;TrustServerCertificate=True"
+      Jwt__Key: ${JWT_KEY:?Defina JWT_KEY en .env (mínimo 32 caracteres)}
+      Cors__AllowedOrigins: ${FRONTEND_ORIGIN:-http://localhost:8080}
+    ports:
+      - "${API_PORT:-5080}:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # URL de la API vista desde el navegador del usuario (no desde la red de Docker).
+        API_URL: ${API_PUBLIC_URL:-http://localhost:5080}
+    ports:
+      - "8080:8080"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  mssql-data:
