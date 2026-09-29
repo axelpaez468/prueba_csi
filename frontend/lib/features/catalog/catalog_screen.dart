@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../auth/session_controller.dart';
+import '../../core/widgets/app_shell.dart';
+import '../../data/models/producto.dart';
 import '../cart/cart_controller.dart';
 import '../cart/cart_screen.dart';
+import '../shell/app_top_bar.dart';
 import 'catalog_controller.dart';
 import 'producto_tile.dart';
 
@@ -15,6 +17,8 @@ class CatalogScreen extends StatefulWidget {
 }
 
 class _CatalogScreenState extends State<CatalogScreen> {
+  String _filtro = '';
+
   @override
   void initState() {
     super.initState();
@@ -25,87 +29,141 @@ class _CatalogScreenState extends State<CatalogScreen> {
   Widget build(BuildContext context) {
     final catalogo = context.watch<CatalogController>();
     final carrito = context.watch<CartController>();
-    final session = context.watch<SessionController>().session;
+
+    final termino = _filtro.trim().toLowerCase();
+    final visibles = termino.isEmpty
+        ? catalogo.items
+        : catalogo.items
+            .where((p) => p.nombre.toLowerCase().contains(termino) || p.codigo.toLowerCase().contains(termino))
+            .toList();
+    final disponibles = catalogo.items.where((p) => p.disponible).length;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Catálogo'),
-        actions: [
-          if (session != null)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Center(child: Text('${session.username} (${session.rol})')),
+      appBar: const AppTopBar(),
+      body: RefreshIndicator(
+        onRefresh: catalogo.cargar,
+        child: CustomScrollView(
+          slivers: [
+            SliverToBoxAdapter(
+              child: PageBody(
+                child: PageHeader(
+                  titulo: 'Catálogo de productos',
+                  subtitulo: catalogo.items.isEmpty
+                      ? 'Precios y existencias en tiempo real'
+                      : '${catalogo.items.length} productos · $disponibles con existencias',
+                  acciones: [
+                    SizedBox(
+                      width: 280,
+                      child: TextField(
+                        onChanged: (v) => setState(() => _filtro = v),
+                        decoration: const InputDecoration(
+                          hintText: 'Buscar por nombre o código',
+                          prefixIcon: Icon(Icons.search),
+                          isDense: true,
+                        ),
+                      ),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: catalogo.cargando ? null : catalogo.cargar,
+                      icon: const Icon(Icons.refresh, size: 18),
+                      label: const Text('Actualizar'),
+                    ),
+                  ],
+                ),
+              ),
             ),
-          IconButton(
-            tooltip: 'Actualizar',
-            onPressed: catalogo.cargando ? null : catalogo.cargar,
-            icon: const Icon(Icons.refresh),
-          ),
-          IconButton(
-            tooltip: 'Carrito',
-            onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CartScreen())),
-            icon: Badge(
-              isLabelVisible: carrito.totalUnidades > 0,
-              label: Text('${carrito.totalUnidades}'),
-              child: const Icon(Icons.shopping_cart_outlined),
-            ),
-          ),
-          IconButton(
-            tooltip: 'Cerrar sesión',
-            onPressed: () => context.read<SessionController>().logout(),
-            icon: const Icon(Icons.logout),
-          ),
-        ],
-      ),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 900),
-          child: _cuerpo(context, catalogo, carrito),
+            if (catalogo.cargando)
+              const SliverToBoxAdapter(
+                child: PageBody(
+                  child: Padding(padding: EdgeInsets.symmetric(horizontal: 24), child: LinearProgressIndicator()),
+                ),
+              ),
+            ..._contenido(context, catalogo, carrito, visibles),
+            const SliverToBoxAdapter(child: SizedBox(height: 32)),
+          ],
         ),
       ),
     );
   }
 
-  Widget _cuerpo(BuildContext context, CatalogController catalogo, CartController carrito) {
-    if (catalogo.cargando && catalogo.items.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
-    }
+  List<Widget> _contenido(
+      BuildContext context, CatalogController catalogo, CartController carrito, List<Producto> visibles) {
+    if (catalogo.items.isEmpty && catalogo.cargando) return const [];
+
     if (catalogo.error != null && catalogo.items.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(catalogo.error!, textAlign: TextAlign.center),
-            const SizedBox(height: 12),
-            OutlinedButton(onPressed: catalogo.cargar, child: const Text('Reintentar')),
-          ],
+      return [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: EmptyState(
+            icono: Icons.cloud_off_outlined,
+            titulo: 'No se pudo cargar el catálogo',
+            mensaje: catalogo.error,
+            accion: FilledButton(onPressed: catalogo.cargar, child: const Text('Reintentar')),
+          ),
         ),
-      );
+      ];
     }
 
-    return RefreshIndicator(
-      onRefresh: catalogo.cargar,
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          if (catalogo.cargando) const LinearProgressIndicator(),
-          for (final p in catalogo.items)
-            ProductoTile(
-              key: ValueKey(p.id),
-              producto: p,
-              enCarrito: carrito.cantidadDe(p.id),
-              onAgregar: (cantidad) {
-                carrito.agregar(p, cantidad);
-                ScaffoldMessenger.of(context)
-                  ..hideCurrentSnackBar()
-                  ..showSnackBar(SnackBar(
-                    content: Text('${p.nombre} agregado al carrito'),
-                    duration: const Duration(seconds: 2),
-                  ));
+    if (visibles.isEmpty) {
+      return const [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: EmptyState(
+            icono: Icons.search_off,
+            titulo: 'Sin resultados',
+            mensaje: 'No hay productos que coincidan con la búsqueda.',
+          ),
+        ),
+      ];
+    }
+
+    return [
+      SliverToBoxAdapter(
+        child: PageBody(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 290,
+                mainAxisExtent: 292,
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
+              ),
+              itemCount: visibles.length,
+              itemBuilder: (context, i) {
+                final p = visibles[i];
+                return ProductoTile(
+                  key: ValueKey(p.id),
+                  producto: p,
+                  enCarrito: carrito.cantidadDe(p.id),
+                  onAgregar: (cantidad) {
+                    carrito.agregar(p, cantidad);
+                    ScaffoldMessenger.of(context)
+                      ..hideCurrentSnackBar()
+                      ..showSnackBar(SnackBar(
+                        content: Row(children: [
+                          const Icon(Icons.check_circle, color: Colors.white, size: 18),
+                          const SizedBox(width: 10),
+                          Expanded(child: Text('${p.nombre} agregado al carrito')),
+                        ]),
+                        action: SnackBarAction(
+                          label: 'Ver carrito',
+                          textColor: const Color(0xFF9FE3D0),
+                          onPressed: () => Navigator.of(context)
+                              .push(MaterialPageRoute(builder: (_) => const CartScreen())),
+                        ),
+                        duration: const Duration(seconds: 3),
+                        persist: false, // con acción, por defecto no se cierra solo
+                      ));
+                  },
+                );
               },
             ),
-        ],
+          ),
+        ),
       ),
-    );
+    ];
   }
 }
