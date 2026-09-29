@@ -20,10 +20,32 @@ class LoginScreen extends StatelessWidget {
             flex: 4,
             child: Center(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.all(32),
+                padding: EdgeInsets.all(ancho < Breakpoints.compacto ? 16 : 32),
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 400),
-                  child: const _FormularioLogin(),
+                  constraints: const BoxConstraints(maxWidth: 440),
+                  // Tarjeta del formulario: esquinas redondeadas y sombra suave en dos capas
+                  // (una amplia y difusa para la elevación, otra corta para definir el borde).
+                  child: Container(
+                    padding: EdgeInsets.all(ancho < Breakpoints.compacto ? 24 : 36),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: AppColors.border),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.primary.withValues(alpha: 0.10),
+                          blurRadius: 40,
+                          offset: const Offset(0, 16),
+                        ),
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.04),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: const _FormularioLogin(),
+                  ),
                 ),
               ),
             ),
