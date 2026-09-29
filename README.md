@@ -122,12 +122,12 @@ Todos los errores tienen el mismo formato: `{ "error": "mensaje legible" }`.
 
 ```bash
 cd backend && dotnet test      # 15 pruebas (1 se omite si no hay SQL Server; ver abajo)
-cd frontend && flutter test    # 8 pruebas
+cd frontend && flutter test    # 28 pruebas
 ```
 
 - **Backend:** usa SQLite en memoria, que a diferencia del proveedor InMemory de EF soporta transacciones reales, `ExecuteUpdate` y *check constraints*. Cubre: precio/total calculados en el servidor aunque el cliente los envíe; descuento de stock; rollback completo si una línea falla; última unidad vendida una sola vez; cantidad ≤ 0; producto inexistente; producto duplicado; pedido vacío; pedido ajeno no visible; y login válido/inválido.
 - **Concurrencia real contra SQL Server:** la prueba lanza 20 pedidos simultáneos por la última unidad. Se activa definiendo `PEDIDOS_TEST_SQLSERVER` con una cadena de conexión (usuario con permiso para crear bases), por ejemplo `Server=.\SQLEXPRESS;Trusted_Connection=True;TrustServerCertificate=True`.
-- **Frontend:** repositorio de pedidos (envía solo `productoId` y `cantidad` con `Bearer`, usa el total del servidor y maneja 400 y 401), carrito (subtotal referencial y **doble clic = un solo pedido**) y widget de catálogo (producto sin stock deshabilitado).
+- **Frontend:** repositorio de pedidos (envía solo `productoId` y `cantidad` con `Bearer`, usa el total del servidor y maneja 400 y 401), carrito (subtotal referencial y **doble clic = un solo pedido**) y widget de catálogo (producto sin stock deshabilitado). Además, **pruebas de layout responsive**: login, catálogo, carrito y comprobante se renderizan a 320, 375, 768, 1366 y 1920 px, y cualquier desborde hace fallar la prueba.
 
 ---
 
