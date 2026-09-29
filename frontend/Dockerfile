@@ -32,6 +32,12 @@ RUN flutter build web --release --no-web-resources-cdn --dart-define=API_URL=${A
 
 # ---------- Etapa 2: archivos estáticos con nginx (usuario no root, puerto 8080) ----------
 FROM nginxinc/nginx-unprivileged:1.27-alpine AS runtime
+ARG API_URL
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+# La CSP debe permitir conexiones a la API: se inyecta su URL en tiempo de build (no en runtime,
+# para que el contenedor pueda correr con el sistema de archivos en solo lectura).
+USER root
+RUN sed -i "s|__API_URL__|${API_URL}|g" /etc/nginx/conf.d/default.conf && nginx -t
+USER nginx
 COPY --from=build /home/builder/app/build/web /usr/share/nginx/html
 EXPOSE 8080
