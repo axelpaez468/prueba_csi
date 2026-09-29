@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Pedidos.Api.Domain;
 using Pedidos.Api.Dtos;
 using Pedidos.Api.Errors;
@@ -19,6 +20,7 @@ public class PedidosController : ControllerBase
 
     [HttpPost]
     [Authorize(Roles = Roles.Vendedor)]
+    [EnableRateLimiting(RateLimitPolicies.CrearPedido)]
     [ProducesResponseType<PedidoResponse>(StatusCodes.Status201Created)]
     [ProducesResponseType<ErrorResponse>(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Crear(CrearPedidoRequest request, CancellationToken ct)

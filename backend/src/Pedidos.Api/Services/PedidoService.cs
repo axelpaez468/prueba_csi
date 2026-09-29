@@ -3,6 +3,7 @@ using Pedidos.Api.Data;
 using Pedidos.Api.Domain;
 using Pedidos.Api.Dtos;
 using Pedidos.Api.Errors;
+using Pedidos.Api.Security;
 
 namespace Pedidos.Api.Services;
 
@@ -99,6 +100,14 @@ public class PedidoService
     {
         if (lineas is null || lineas.Count == 0)
             throw new BusinessRuleException("El pedido debe tener al menos una línea.");
+
+        if (lineas.Count > InputLimits.LineasPorPedidoMax)
+            throw new BusinessRuleException($"Un pedido admite como máximo {InputLimits.LineasPorPedidoMax} productos distintos.");
+
+        var cantidadExcesiva = lineas.FirstOrDefault(l => l.Cantidad > InputLimits.CantidadPorLineaMax);
+        if (cantidadExcesiva is not null)
+            throw new BusinessRuleException(
+                $"La cantidad del producto {cantidadExcesiva.ProductoId} supera el máximo de {InputLimits.CantidadPorLineaMax} unidades por línea.");
 
         var cantidadInvalida = lineas.FirstOrDefault(l => l.Cantidad <= 0);
         if (cantidadInvalida is not null)

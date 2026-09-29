@@ -28,9 +28,25 @@ var corsOrigins = (config["Cors:AllowedOrigins"] ?? string.Empty)
 if (corsOrigins.Length == 0 || corsOrigins.Contains("*"))
     throw new InvalidOperationException("Cors:AllowedOrigins debe listar orígenes explícitos (no se permite '*').");
 
+// ---------- Servidor HTTP: límites contra agotamiento de recursos ----------
+builder.WebHost.ConfigureKestrel(k =>
+{
+    k.AddServerHeader = false;                                   // no anunciar el servidor ni su versión
+    k.Limits.MaxRequestBodySize = InputLimits.CuerpoMaxBytes;    // cuerpos gigantes -> 413
+    k.Limits.MaxRequestHeadersTotalSize = 16 * 1024;
+    k.Limits.MaxRequestLineSize = 4 * 1024;
+    k.Limits.RequestHeadersTimeout = TimeSpan.FromSeconds(10);   // slowloris: cabeceras enviadas muy lento
+    k.Limits.KeepAliveTimeout = TimeSpan.FromSeconds(30);
+    k.Limits.MaxConcurrentConnections = 500;
+    k.Limits.MaxConcurrentUpgradedConnections = 0;              // la API no usa WebSockets
+});
+
 // ---------- Servicios ----------
-builder.Services.AddDbContext<AppDbContext>(o => o.UseSqlServer(connectionString));
+builder.Services.AddDbContext<AppDbContext>(o => o.UseSqlServer(connectionString, sql => sql.CommandTimeout(15)));
 builder.Services.AddSingleton(TimeProvider.System);
+// Con tope de entradas: un atacante probando usuarios aleatorios no puede agotar la memoria.
+builder.Services.AddMemoryCache(o => o.SizeLimit = 10_000);
+builder.Services.AddSingleton<LoginThrottle>();
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<PedidoService>();
@@ -94,11 +110,16 @@ builder.Services.AddRateLimiter(o =>
 {
     o.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
     o.OnRejected = async (ctx, ct) =>
+    {
+        if (ctx.Lease.TryGetMetadata(MetadataName.RetryAfter, out var espera))
+            ctx.HttpContext.Response.Headers.RetryAfter = ((int)Math.Ceiling(espera.TotalSeconds)).ToString();
         await ctx.HttpContext.Response.WriteAsJsonAsync(
-            new ErrorResponse("Demasiados intentos. Espere un minuto e intente de nuevo."), ct);
-    o.AddPolicy(RateLimitPolicies.Login, http => RateLimitPartition.GetFixedWindowLimiter(
-        http.Connection.RemoteIpAddress?.ToString() ?? "desconocido",
-        _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1) }));
+            new ErrorResponse("Demasiadas solicitudes. Espere un momento e intente de nuevo."), ct);
+    };
+    // Capas: límite global por IP (toda la API) + límites específicos más estrictos por endpoint.
+    o.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(RateLimitPolicies.Global);
+    o.AddPolicy(RateLimitPolicies.Login, RateLimitPolicies.PorIpLogin);
+    o.AddPolicy(RateLimitPolicies.CrearPedido, RateLimitPolicies.PorUsuarioPedidos);
 });
 
 builder.Services.AddEndpointsApiExplorer();
@@ -122,17 +143,25 @@ builder.Services.AddSwaggerGen(o =>
 var app = builder.Build();
 
 app.UseExceptionHandler();
+app.UseSecurityHeaders();
 
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+else
+{
+    // Solo se envía en respuestas HTTPS (TLS terminado en el proxy/balanceador de producción).
+    app.UseHsts();
+}
 
 app.UseCors();
 app.UseAuthentication();
-app.UseAuthorization();
+// Después de autenticar (para limitar por usuario) y antes de autorizar y ejecutar el endpoint:
+// las peticiones rechazadas no llegan a tocar la base de datos.
 app.UseRateLimiter();
+app.UseAuthorization();
 
 app.MapControllers();
 app.MapGet("/health", () => Results.Ok(new { status = "ok" })).AllowAnonymous().ExcludeFromDescription();
