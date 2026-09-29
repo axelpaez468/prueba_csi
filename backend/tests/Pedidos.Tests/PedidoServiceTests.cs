@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Pedidos.Api.Dtos;
 using Pedidos.Api.Errors;
+using Pedidos.Api.Security;
 using Pedidos.Api.Services;
 using Pedidos.Tests.Infra;
 
@@ -116,6 +117,28 @@ public class PedidoServiceTests : IDisposable
     public async Task Crear_SinLineas_Falla()
     {
         await Assert.ThrowsAsync<BusinessRuleException>(() => Crear(TestDb.VendedorId));
+    }
+
+    // ---------- Límites de tamaño (protección contra abuso de recursos) ----------
+
+    [Fact]
+    public async Task Crear_ConDemasiadasLineas_Falla()
+    {
+        var lineas = Enumerable.Range(1, InputLimits.LineasPorPedidoMax + 1).Select(id => Linea(id, 1)).ToArray();
+
+        var ex = await Assert.ThrowsAsync<BusinessRuleException>(() => Crear(TestDb.VendedorId, lineas));
+
+        Assert.Contains("máximo", ex.Message);
+    }
+
+    [Fact]
+    public async Task Crear_ConCantidadDesproporcionada_Falla()
+    {
+        var ex = await Assert.ThrowsAsync<BusinessRuleException>(() =>
+            Crear(TestDb.VendedorId, Linea(1, InputLimits.CantidadPorLineaMax + 1)));
+
+        Assert.Contains("supera el máximo", ex.Message);
+        Assert.Equal(10, _testDb.StockDe(1));
     }
 
     // ---------- Autorización a nivel de recurso ----------
