@@ -219,3 +219,4 @@ Se utilizó **Claude Code (Anthropic)** como asistente durante toda la prueba, p
 - redactar SECURITY_REVIEW.md, MENSAJE_PM.md y este README.
 
 Las decisiones de diseño se revisaron y validaron ejecutando el sistema: reglas de negocio, concurrencia con peticiones simultáneas reales, flujo 401 → login y ausencia del token en consola y almacenamiento.
+# prueba_csi
