@@ -1,0 +1,93 @@
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:provider/provider.dart';
+
+import 'core/config/app_config.dart';
+import 'core/network/api_client.dart';
+import 'core/security/token_storage.dart';
+import 'data/repositories/auth_repository.dart';
+import 'data/repositories/pedido_repository.dart';
+import 'data/repositories/producto_repository.dart';
+import 'features/auth/login_screen.dart';
+import 'features/auth/session_controller.dart';
+import 'features/cart/cart_controller.dart';
+import 'features/catalog/catalog_controller.dart';
+import 'features/catalog/catalog_screen.dart';
+
+/// Composición de dependencias: core -> data -> features.
+class PedidosApp extends StatefulWidget {
+  const PedidosApp({super.key});
+
+  @override
+  State<PedidosApp> createState() => _PedidosAppState();
+}
+
+class _PedidosAppState extends State<PedidosApp> {
+  final _navigatorKey = GlobalKey<NavigatorState>();
+
+  late final TokenStorage _storage;
+  late final ApiClient _api;
+  late final SessionController _session;
+  late final CatalogController _catalogo;
+  late final CartController _carrito;
+
+  SessionStatus? _ultimoEstado;
+
+  @override
+  void initState() {
+    super.initState();
+    _storage = TokenStorage();
+    _api = ApiClient(baseUrl: AppConfig.apiUrl, httpClient: http.Client(), tokenProvider: _storage.readToken);
+    _session = SessionController(AuthRepository(_api), _storage);
+    _catalogo = CatalogController(ProductoRepository(_api));
+    _carrito = CartController(PedidoRepository(_api));
+
+    // Cualquier 401 en una petición autenticada cierra la sesión.
+    _api.onUnauthorized = () => _session.logout(expirada: true);
+    _session.addListener(_alCambiarSesion);
+    _session.restore();
+  }
+
+  /// Al salir (voluntariamente o por 401) se descartan pantallas y datos del usuario anterior.
+  void _alCambiarSesion() {
+    final estado = _session.status;
+    if (estado == _ultimoEstado) return;
+    _ultimoEstado = estado;
+
+    if (estado == SessionStatus.unauthenticated) {
+      _navigatorKey.currentState?.popUntil((r) => r.isFirst);
+      _carrito.vaciar();
+      _catalogo.limpiar();
+    }
+  }
+
+  @override
+  void dispose() {
+    _session.removeListener(_alCambiarSesion);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider.value(value: _session),
+        ChangeNotifierProvider.value(value: _catalogo),
+        ChangeNotifierProvider.value(value: _carrito),
+      ],
+      child: MaterialApp(
+        title: 'Sistema de Pedidos',
+        navigatorKey: _navigatorKey,
+        debugShowCheckedModeBanner: false,
+        theme: ThemeData(colorSchemeSeed: const Color(0xFF1F4E79), useMaterial3: true),
+        home: Consumer<SessionController>(
+          builder: (_, session, _) => switch (session.status) {
+            SessionStatus.restoring => const Scaffold(body: Center(child: CircularProgressIndicator())),
+            SessionStatus.unauthenticated => const LoginScreen(),
+            SessionStatus.authenticated => const CatalogScreen(),
+          },
+        ),
+      ),
+    );
+  }
+}
