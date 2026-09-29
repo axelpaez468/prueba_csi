@@ -121,7 +121,7 @@ Todos los errores tienen el mismo formato: `{ "error": "mensaje legible" }`.
 ### Pruebas automatizadas
 
 ```bash
-cd backend && dotnet test      # 15 pruebas (1 se omite si no hay SQL Server; ver abajo)
+cd backend && dotnet test      # 23 pruebas (1 se omite si no hay SQL Server; ver abajo)
 cd frontend && flutter test    # 28 pruebas
 ```
 
@@ -192,6 +192,28 @@ cd frontend && flutter test    # 28 pruebas
 
 La revisión de los fragmentos A y B está en [SECURITY_REVIEW.md](SECURITY_REVIEW.md).
 
+### Endurecimiento adicional
+
+| Amenaza | Defensa | Dónde |
+|---|---|---|
+| **Inyección SQL** | Consultas parametrizadas (EF Core). Tipos estrictos en el JSON: `"productoId": "1 OR 1=1"` se rechaza con 400 antes de llegar a la BD. Login de BD de mínimos privilegios (sin `DROP`/`ALTER`). | `AuthService`, `PedidoService`, `init.sql`; pruebas con cargas `' OR '1'='1`, `'; DROP TABLE ...` y `UNION SELECT` |
+| **Fuerza bruta en el login** | 10 intentos/min por IP, **más** bloqueo de 5 min por cuenta tras 5 fallos (frena ataques distribuidos desde muchas IPs). Cuenta también usuarios inexistentes, así que no revela cuáles existen. | `RateLimitPolicies`, `LoginThrottle` |
+| **Flood / DoS a nivel de aplicación** | Límite global de 300 peticiones/min por IP; límite de 20 pedidos/min por usuario (token bucket); `429` con `Retry-After`. | `Program.cs`, `RateLimitPolicies` |
+| **Agotamiento de recursos** | Kestrel: cuerpo máximo 32 KB (413), cabeceras 16 KB, timeout de cabeceras de 10 s (*slowloris*), máximo 500 conexiones. Topes de entrada: 50 líneas por pedido, 1000 unidades por línea, usuario ≤ 50 y contraseña ≤ 128 caracteres. Timeout de comandos SQL de 15 s. Caché del bloqueo con tamaño máximo. | `Program.cs`, `InputLimits` |
+| **Flood al frontend** | nginx: 20 peticiones/s por IP (ráfaga 60), 30 conexiones por IP, timeouts cortos, cuerpo máximo 1 KB, solo `GET`/`HEAD`. | `frontend/nginx.conf` |
+| **XSS / clickjacking** | CSP estricta en el frontend (solo código propio; conexiones solo a sí mismo y a la API, así un script inyectado no podría enviar el token a otro dominio). `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy`, `Permissions-Policy`. En la API: `default-src 'none'` y `Cache-Control: no-store`. | `nginx.conf`, `SecurityHeaders` |
+| **Divulgación de información** | Sin cabecera `Server` ni `server_tokens`; errores genéricos; logs de intentos fallidos sin contraseñas y sin caracteres de control (evita falsificar líneas del log). | `Program.cs`, `AuthController` |
+| **Compromiso de un contenedor** | API y frontend con sistema de archivos de solo lectura, `cap_drop: ALL`, `no-new-privileges`, usuario no root y límites de memoria, CPU y procesos. La BD no expone su puerto. | `docker-compose.yml` |
+
+Verificado contra el stack en Docker:
+- el flood de 400 peticiones terminó con 429 por encima del límite, y la API siguió respondiendo con 1 % de CPU;
+- el cuerpo de 88 KB devolvió 413;
+- la cuenta quedó bloqueada tras 5 fallos, aun con la contraseña correcta;
+- las inyecciones SQL devolvieron 401;
+- un `POST` a nginx devolvió 405.
+
+> **Sobre DDoS:** un ataque distribuido real (miles de IPs, gigabits de tráfico) no se frena dentro de la aplicación: satura la red antes de llegar a ella. En producción se mitiga en el borde (Cloudflare, AWS Shield/WAF, Azure Front Door o el balanceador) con filtrado y límites por IP. Lo implementado aquí evita que un solo cliente o una ráfaga agote los recursos de la API y la base de datos. Si la API se publica detrás de un proxy, hay que configurar `ForwardedHeaders` con la IP del proxy como confiable, para que los límites se apliquen a la IP real del cliente.
+
 ---
 
 ## 6. Pendiente y posibles mejoras
@@ -203,7 +225,7 @@ La revisión de los fragmentos A y B está en [SECURITY_REVIEW.md](SECURITY_REVI
 | Refresh tokens / revocación | Hoy el token dura 60 min y cerrar sesión solo lo borra del cliente. Se agregaría un refresh token rotativo guardado en BD y una lista de revocación (`jti`). |
 | Idempotencia al crear pedidos | El doble clic está cubierto en la UI. Para reintentos de red, el cliente enviaría un `Idempotency-Key` y la API guardaría la respuesta asociada a esa clave. |
 | Migraciones | El esquema lo gestiona `init.sql`. Con evolución del modelo se pasaría a migraciones versionadas (EF Core Migrations o DbUp). |
-| Rate limit distribuido | El límite de login es en memoria (por instancia). Con varias réplicas iría en Redis o en el gateway. |
+| Rate limit distribuido | Los límites y el bloqueo de cuentas son en memoria (por instancia). Con varias réplicas irían en Redis o en el gateway. |
 | Observabilidad | Logs estructurados y *health checks* de dependencias (`/health` hoy no consulta la BD). |
 | Paginación del catálogo | No hace falta con 5 productos; con catálogos grandes: `?page=&size=` y búsqueda. |
 
