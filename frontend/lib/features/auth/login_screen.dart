@@ -50,8 +50,21 @@ class _PanelMarca extends StatelessWidget {
           colors: [AppColors.primary, AppColors.primaryDark],
         ),
       ),
-      padding: const EdgeInsets.all(48),
-      child: Column(
+      // Desplazable y con altura mínima = pantalla: en ventanas bajas no se desborda.
+      child: LayoutBuilder(
+        builder: (context, constraints) => SingleChildScrollView(
+          padding: const EdgeInsets.all(48),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight - 96),
+            child: IntrinsicHeight(child: _contenido(theme, blanco70)),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _contenido(ThemeData theme, Color blanco70) {
+    return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const BrandLogo(claro: true),
@@ -78,7 +91,7 @@ class _PanelMarca extends StatelessWidget {
                 children: [
                   Icon(icono, color: Colors.white, size: 20),
                   const SizedBox(width: 12),
-                  Text(texto, style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white)),
+                  Flexible(child: Text(texto, style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white))),
                 ],
               ),
             ),
@@ -86,7 +99,6 @@ class _PanelMarca extends StatelessWidget {
           Text('© ${DateTime.now().year} Sistema de Pedidos',
               style: theme.textTheme.bodySmall?.copyWith(color: blanco70)),
         ],
-      ),
     );
   }
 }

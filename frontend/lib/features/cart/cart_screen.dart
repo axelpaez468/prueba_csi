@@ -49,8 +49,8 @@ class CartScreen extends StatelessWidget {
                           '${carrito.items.length} ${carrito.items.length == 1 ? 'producto' : 'productos'} · ${carrito.totalUnidades} unidades',
                     ),
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
-                      child: ancho >= 900
+                      padding: EdgeInsets.fromLTRB(ancho < Breakpoints.compacto ? 16 : 24, 0, ancho < Breakpoints.compacto ? 16 : 24, 32),
+                      child: ancho >= Breakpoints.amplio
                           ? const Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
@@ -75,92 +75,87 @@ class CartScreen extends StatelessWidget {
 class _ListaLineas extends StatelessWidget {
   const _ListaLineas();
 
+  /// Por debajo de este ancho de tarjeta cada línea se apila (celular).
+  static const _anchoTabla = 520.0;
+
   @override
   Widget build(BuildContext context) {
     final carrito = context.watch<CartController>();
     final theme = Theme.of(context);
 
     return Card(
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-            child: Row(
-              children: [
-                Expanded(child: Text('Producto', style: _encabezado(theme))),
-                SizedBox(width: 124, child: Text('Cantidad', textAlign: TextAlign.center, style: _encabezado(theme))),
-                SizedBox(width: 110, child: Text('Subtotal', textAlign: TextAlign.end, style: _encabezado(theme))),
-                const SizedBox(width: 44),
-              ],
-            ),
-          ),
-          const Divider(),
-          for (final (i, item) in carrito.items.indexed) ...[
-            if (i > 0) const Divider(indent: 20, endIndent: 20),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(item.producto.nombre, style: theme.textTheme.titleSmall),
-                        const SizedBox(height: 2),
-                        Text('${item.producto.codigo} · ${formatearMoneda(item.producto.precio)} c/u',
-                            style: theme.textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
-                      ],
-                    ),
-                  ),
-                  SizedBox(
-                    width: 124,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        IconButton(
-                          tooltip: 'Menos',
-                          visualDensity: VisualDensity.compact,
-                          onPressed: carrito.enviando
-                              ? null
-                              : () => carrito.cambiarCantidad(item.producto.id, item.cantidad - 1),
-                          icon: const Icon(Icons.remove_circle_outline, size: 20),
-                        ),
-                        SizedBox(
-                          width: 24,
-                          child: Text('${item.cantidad}',
-                              textAlign: TextAlign.center, style: theme.textTheme.titleSmall),
-                        ),
-                        IconButton(
-                          tooltip: 'Más',
-                          visualDensity: VisualDensity.compact,
-                          onPressed: carrito.enviando || item.cantidad >= item.producto.stock
-                              ? null
-                              : () => carrito.cambiarCantidad(item.producto.id, item.cantidad + 1),
-                          icon: const Icon(Icons.add_circle_outline, size: 20),
-                        ),
-                      ],
-                    ),
-                  ),
-                  SizedBox(
-                    width: 110,
-                    child: Text(formatearMoneda(item.subtotalReferencial),
-                        textAlign: TextAlign.end, style: theme.textTheme.titleSmall),
-                  ),
-                  SizedBox(
-                    width: 44,
-                    child: IconButton(
-                      tooltip: 'Eliminar',
-                      onPressed: carrito.enviando ? null : () => carrito.eliminar(item.producto.id),
-                      icon: const Icon(Icons.delete_outline, color: AppColors.textSecondary),
-                    ),
-                  ),
-                ],
+      child: LayoutBuilder(builder: (context, constraints) {
+        final tabla = constraints.maxWidth >= _anchoTabla;
+        final margen = tabla ? 20.0 : 16.0;
+
+        return Column(
+          children: [
+            if (tabla) ...[
+              Padding(
+                padding: EdgeInsets.fromLTRB(margen, 16, margen, 12),
+                child: Row(
+                  children: [
+                    Expanded(child: Text('Producto', style: _encabezado(theme))),
+                    SizedBox(width: 124, child: Text('Cantidad', textAlign: TextAlign.center, style: _encabezado(theme))),
+                    SizedBox(width: 110, child: Text('Subtotal', textAlign: TextAlign.end, style: _encabezado(theme))),
+                    const SizedBox(width: 44),
+                  ],
+                ),
               ),
-            ),
+              const Divider(),
+            ] else
+              const SizedBox(height: 4),
+            for (final (i, item) in carrito.items.indexed) ...[
+              if (i > 0) Divider(indent: margen, endIndent: margen),
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: margen, vertical: 12),
+                child: tabla ? _lineaTabla(context, carrito, item) : _lineaApilada(context, carrito, item),
+              ),
+            ],
+            const SizedBox(height: 8),
           ],
-          const SizedBox(height: 8),
-        ],
-      ),
+        );
+      }),
+    );
+  }
+
+  Widget _lineaTabla(BuildContext context, CartController carrito, CartItem item) {
+    final theme = Theme.of(context);
+    return Row(
+      children: [
+        Expanded(child: _Descripcion(item: item)),
+        SizedBox(width: 124, child: _SelectorCantidad(carrito: carrito, item: item)),
+        SizedBox(
+          width: 110,
+          child: Text(formatearMoneda(item.subtotalReferencial),
+              textAlign: TextAlign.end, style: theme.textTheme.titleSmall),
+        ),
+        SizedBox(width: 44, child: _BotonEliminar(carrito: carrito, item: item)),
+      ],
+    );
+  }
+
+  Widget _lineaApilada(BuildContext context, CartController carrito, CartItem item) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: _Descripcion(item: item)),
+            _BotonEliminar(carrito: carrito, item: item),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Row(
+          children: [
+            _SelectorCantidad(carrito: carrito, item: item),
+            const Spacer(),
+            Text(formatearMoneda(item.subtotalReferencial), style: theme.textTheme.titleSmall),
+          ],
+        ),
+      ],
     );
   }
 
@@ -168,6 +163,74 @@ class _ListaLineas extends StatelessWidget {
       theme.textTheme.labelMedium?.copyWith(color: AppColors.textSecondary, letterSpacing: 0.4);
 }
 
+class _Descripcion extends StatelessWidget {
+  const _Descripcion({required this.item});
+
+  final CartItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(item.producto.nombre, style: theme.textTheme.titleSmall),
+        const SizedBox(height: 2),
+        Text('${item.producto.codigo} · ${formatearMoneda(item.producto.precio)} c/u',
+            style: theme.textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
+      ],
+    );
+  }
+}
+
+class _SelectorCantidad extends StatelessWidget {
+  const _SelectorCantidad({required this.carrito, required this.item});
+
+  final CartController carrito;
+  final CartItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        IconButton(
+          tooltip: 'Menos',
+          visualDensity: VisualDensity.compact,
+          onPressed: carrito.enviando ? null : () => carrito.cambiarCantidad(item.producto.id, item.cantidad - 1),
+          icon: const Icon(Icons.remove_circle_outline, size: 20),
+        ),
+        SizedBox(
+          width: 24,
+          child: Text('${item.cantidad}', textAlign: TextAlign.center, style: Theme.of(context).textTheme.titleSmall),
+        ),
+        IconButton(
+          tooltip: 'Más',
+          visualDensity: VisualDensity.compact,
+          onPressed: carrito.enviando || item.cantidad >= item.producto.stock
+              ? null
+              : () => carrito.cambiarCantidad(item.producto.id, item.cantidad + 1),
+          icon: const Icon(Icons.add_circle_outline, size: 20),
+        ),
+      ],
+    );
+  }
+}
+
+class _BotonEliminar extends StatelessWidget {
+  const _BotonEliminar({required this.carrito, required this.item});
+
+  final CartController carrito;
+  final CartItem item;
+
+  @override
+  Widget build(BuildContext context) => IconButton(
+        tooltip: 'Eliminar',
+        onPressed: carrito.enviando ? null : () => carrito.eliminar(item.producto.id),
+        icon: const Icon(Icons.delete_outline, color: AppColors.textSecondary),
+      );
+}
 class _Resumen extends StatelessWidget {
   const _Resumen();
 
