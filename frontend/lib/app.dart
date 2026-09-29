@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'core/config/app_config.dart';
 import 'core/network/api_client.dart';
 import 'core/security/token_storage.dart';
+import 'core/theme/app_theme.dart';
 import 'data/repositories/auth_repository.dart';
 import 'data/repositories/pedido_repository.dart';
 import 'data/repositories/producto_repository.dart';
@@ -24,6 +25,7 @@ class PedidosApp extends StatefulWidget {
 
 class _PedidosAppState extends State<PedidosApp> {
   final _navigatorKey = GlobalKey<NavigatorState>();
+  final _messengerKey = GlobalKey<ScaffoldMessengerState>();
 
   late final TokenStorage _storage;
   late final ApiClient _api;
@@ -56,6 +58,7 @@ class _PedidosAppState extends State<PedidosApp> {
 
     if (estado == SessionStatus.unauthenticated) {
       _navigatorKey.currentState?.popUntil((r) => r.isFirst);
+      _messengerKey.currentState?.clearSnackBars();
       _carrito.vaciar();
       _catalogo.limpiar();
     }
@@ -78,8 +81,9 @@ class _PedidosAppState extends State<PedidosApp> {
       child: MaterialApp(
         title: 'Sistema de Pedidos',
         navigatorKey: _navigatorKey,
+        scaffoldMessengerKey: _messengerKey,
         debugShowCheckedModeBanner: false,
-        theme: ThemeData(colorSchemeSeed: const Color(0xFF1F4E79), useMaterial3: true),
+        theme: AppTheme.light(),
         home: Consumer<SessionController>(
           builder: (_, session, _) => switch (session.status) {
             SessionStatus.restoring => const Scaffold(body: Center(child: CircularProgressIndicator())),
