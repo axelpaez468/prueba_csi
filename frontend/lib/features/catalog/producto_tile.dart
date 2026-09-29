@@ -4,6 +4,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/util/formatters.dart';
 import '../../core/widgets/app_shell.dart';
 import '../../data/models/producto.dart';
+import 'producto_imagen.dart';
 
 /// Tarjeta de producto del catálogo con selector de cantidad. Sin stock se muestra deshabilitada.
 class ProductoTile extends StatefulWidget {
@@ -110,37 +111,36 @@ class _ProductoTileState extends State<ProductoTile> {
   }
 }
 
-/// Franja superior con un ícono representativo; el color se deriva del id para distinguir productos.
+/// Foto del producto en la parte superior de la tarjeta, con etiqueta "Agotado" si no hay stock.
 class _Portada extends StatelessWidget {
   const _Portada({required this.producto});
 
   final Producto producto;
 
-  static const _tonos = [
-    Color(0xFFE8EEF7),
-    Color(0xFFE6F2EF),
-    Color(0xFFF3ECE3),
-    Color(0xFFEDE9F5),
-    Color(0xFFE5F0F7),
-  ];
-
-  static IconData _icono(String nombre) {
-    final n = nombre.toLowerCase();
-    if (n.contains('teclado')) return Icons.keyboard_outlined;
-    if (n.contains('mouse')) return Icons.mouse_outlined;
-    if (n.contains('monitor')) return Icons.desktop_windows_outlined;
-    if (n.contains('aud')) return Icons.headphones_outlined;
-    if (n.contains('cam')) return Icons.videocam_outlined;
-    return Icons.inventory_2_outlined;
-  }
-
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 96,
-      color: _tonos[producto.id % _tonos.length],
-      alignment: Alignment.center,
-      child: Icon(_icono(producto.nombre), size: 40, color: AppColors.primary.withValues(alpha: 0.75)),
+    return SizedBox(
+      height: 160,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          ProductoImagen(producto: producto),
+          if (!producto.disponible)
+            Positioned(
+              top: 10,
+              left: 10,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.textPrimary.withValues(alpha: 0.8),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: const Text('Agotado',
+                    style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

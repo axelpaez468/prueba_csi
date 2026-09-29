@@ -6,6 +6,7 @@ import '../../core/util/formatters.dart';
 import '../../core/widgets/app_shell.dart';
 import '../auth/session_controller.dart';
 import '../catalog/catalog_controller.dart';
+import '../catalog/producto_imagen.dart';
 import '../order/order_confirmation_screen.dart';
 import '../shell/app_top_bar.dart';
 import 'cart_controller.dart';
@@ -171,13 +172,24 @@ class _Descripcion extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Row(
       children: [
-        Text(item.producto.nombre, style: theme.textTheme.titleSmall),
-        const SizedBox(height: 2),
-        Text('${item.producto.codigo} · ${formatearMoneda(item.producto.precio)} c/u',
-            style: theme.textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: SizedBox.square(dimension: 48, child: ProductoImagen(producto: item.producto, tamanoIcono: 22)),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(item.producto.nombre, style: theme.textTheme.titleSmall),
+              const SizedBox(height: 2),
+              Text('${item.producto.codigo} · ${formatearMoneda(item.producto.precio)} c/u',
+                  style: theme.textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
+            ],
+          ),
+        ),
       ],
     );
   }
