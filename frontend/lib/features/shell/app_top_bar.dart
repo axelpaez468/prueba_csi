@@ -25,18 +25,18 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
     return AppBar(
       toolbarHeight: 64,
       automaticallyImplyLeading: false,
-      titleSpacing: 20,
+      titleSpacing: compacto ? 12 : 20,
       title: Row(
         children: [
           if (leading != null) ...[leading!, const SizedBox(width: 8)],
-          const BrandLogo(),
+          Flexible(child: BrandLogo(soloIcono: ancho < 400)),
         ],
       ),
       actions: [
         if (mostrarCarrito) _BotonCarrito(compacto: compacto),
         const SizedBox(width: 8),
         _MenuUsuario(compacto: compacto),
-        const SizedBox(width: 16),
+        SizedBox(width: compacto ? 8 : 16),
       ],
     );
   }

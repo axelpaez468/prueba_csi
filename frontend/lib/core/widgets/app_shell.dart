@@ -4,10 +4,13 @@ import '../theme/app_theme.dart';
 
 /// Logotipo de la aplicación (ícono + nombre).
 class BrandLogo extends StatelessWidget {
-  const BrandLogo({super.key, this.claro = false});
+  const BrandLogo({super.key, this.claro = false, this.soloIcono = false});
 
   /// true sobre fondos oscuros.
   final bool claro;
+
+  /// true en pantallas muy angostas: se omite el nombre.
+  final bool soloIcono;
 
   @override
   Widget build(BuildContext context) {
@@ -23,21 +26,39 @@ class BrandLogo extends StatelessWidget {
           ),
           child: const Icon(Icons.inventory_2_outlined, color: Colors.white, size: 19),
         ),
-        const SizedBox(width: 10),
-        Text(
-          'Pedidos',
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                color: claro ? Colors.white : AppColors.textPrimary,
-                fontWeight: FontWeight.w700,
-                letterSpacing: -0.3,
-              ),
-        ),
+        if (!soloIcono) ...[
+          const SizedBox(width: 10),
+          Flexible(
+            child: Text(
+              'Pedidos',
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    color: claro ? Colors.white : AppColors.textPrimary,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.3,
+                  ),
+            ),
+          ),
+        ],
       ],
     );
   }
 }
 
-/// Contenedor centrado con ancho máximo y márgenes consistentes.
+/// Puntos de quiebre de la interfaz.
+class Breakpoints {
+  const Breakpoints._();
+
+  /// Por debajo de este ancho se usa el diseño de celular.
+  static const compacto = 600.0;
+
+  /// Desde este ancho se usan diseños de dos columnas (login, carrito).
+  static const amplio = 900.0;
+
+  static bool esCompacto(BuildContext context) => MediaQuery.sizeOf(context).width < compacto;
+}
+
+/// Contenedor centrado que ocupa todo el ancho disponible hasta [maxWidth].
 class PageBody extends StatelessWidget {
   const PageBody({super.key, required this.child, this.maxWidth = 1180});
 
@@ -50,7 +71,7 @@ class PageBody extends StatelessWidget {
       alignment: Alignment.topCenter,
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: maxWidth),
-        child: child,
+        child: SizedBox(width: double.infinity, child: child),
       ),
     );
   }
@@ -78,21 +99,32 @@ class PageHeader extends StatelessWidget {
         ],
       ],
     );
-    final botones = Wrap(spacing: 8, runSpacing: 8, children: acciones);
+    final botonesAmplio = Wrap(spacing: 8, runSpacing: 8, children: acciones);
+    // En pantallas angostas la primera acción (p. ej. el buscador) ocupa todo el espacio sobrante.
+    final botonesAngosto = Row(
+      children: [
+        for (final (i, a) in acciones.indexed) ...[
+          if (i > 0) const SizedBox(width: 8),
+          i == 0 ? Expanded(child: a) : a,
+        ],
+      ],
+    );
+
+    final margen = Breakpoints.esCompacto(context) ? 16.0 : 24.0;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
+      padding: EdgeInsets.fromLTRB(margen, margen + 4, margen, 20),
       child: LayoutBuilder(
         builder: (context, constraints) => acciones.isEmpty
             ? Align(alignment: Alignment.centerLeft, child: textos)
             : constraints.maxWidth >= 760
                 ? Row(
                     crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [Expanded(child: textos), botones],
+                    children: [Expanded(child: textos), botonesAmplio],
                   )
                 : Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [textos, const SizedBox(height: 16), botones],
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [textos, const SizedBox(height: 16), botonesAngosto],
                   ),
       ),
     );
