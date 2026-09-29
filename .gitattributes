@@ -1,0 +1,4 @@
+* text=auto
+# Scripts que se ejecutan dentro de contenedores Linux: siempre LF.
+*.sh text eol=lf
+*.sql text eol=lf

@@ -1,0 +1,25 @@
+# Secretos
+.env
+
+# .NET
+bin/
+obj/
+*.user
+.vs/
+TestResults/
+
+# Flutter / Dart
+.dart_tool/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+*.iml
+
+# Editores / SO
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
+
+# Enunciado de la prueba
+Prueba_Tecnica_FullStack.pdf
