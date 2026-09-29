@@ -137,11 +137,7 @@ class _PanelMarca extends StatelessWidget {
             ),
           const Spacer(),
           Text('© ${DateTime.now().year} Sistema de Pedidos',
-              style: theme.textTheme.bodySmall?.copyWith(color: blanco70)),
-          // Atribución que exige la licencia CC BY-SA 4.0 de la foto (detalle en assets/fondos/CREDITOS.md).
-          Text('Foto: WaterbedsRobbie, Wikimedia Commons · CC BY-SA 4.0',
-              style: theme.textTheme.labelSmall?.copyWith(color: Colors.white54)),
-        ],
+              style: theme.textTheme.bodySmall?.copyWith(color: blanco70)),        ],
     );
   }
 }
