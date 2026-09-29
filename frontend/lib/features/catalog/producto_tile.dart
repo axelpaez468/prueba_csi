@@ -54,12 +54,15 @@ class _ProductoTileState extends State<ProductoTile> {
                     const SizedBox(height: 2),
                     Text(p.nombre, maxLines: 2, overflow: TextOverflow.ellipsis, style: theme.textTheme.titleMedium),
                     const SizedBox(height: 8),
-                    Row(
+                    // Wrap: si no cabe en una línea, la etiqueta baja; el precio nunca se parte.
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
-                        Expanded(
-                          child: Text(formatearMoneda(p.precio),
-                              style: theme.textTheme.titleLarge?.copyWith(color: AppColors.primary)),
-                        ),
+                        Text(formatearMoneda(p.precio),
+                            softWrap: false,
+                            style: theme.textTheme.titleLarge?.copyWith(color: AppColors.primary)),
                         _PillStock(stock: p.stock),
                       ],
                     ),
@@ -68,6 +71,7 @@ class _ProductoTileState extends State<ProductoTile> {
                       Text('${widget.enCarrito} en tu carrito',
                           style: theme.textTheme.bodySmall?.copyWith(color: AppColors.accent)),
                     ],
+                    const SizedBox(height: 14),
                     const Spacer(),
                     Row(
                       children: [

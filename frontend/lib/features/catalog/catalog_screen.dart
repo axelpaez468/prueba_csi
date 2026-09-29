@@ -37,6 +37,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
             .where((p) => p.nombre.toLowerCase().contains(termino) || p.codigo.toLowerCase().contains(termino))
             .toList();
     final disponibles = catalogo.items.where((p) => p.disponible).length;
+    final compacto = Breakpoints.esCompacto(context);
 
     return Scaffold(
       appBar: const AppTopBar(),
@@ -63,19 +64,28 @@ class _CatalogScreenState extends State<CatalogScreen> {
                         ),
                       ),
                     ),
-                    OutlinedButton.icon(
-                      onPressed: catalogo.cargando ? null : catalogo.cargar,
-                      icon: const Icon(Icons.refresh, size: 18),
-                      label: const Text('Actualizar'),
-                    ),
+                    if (compacto)
+                      IconButton.outlined(
+                        tooltip: 'Actualizar',
+                        onPressed: catalogo.cargando ? null : catalogo.cargar,
+                        icon: const Icon(Icons.refresh),
+                      )
+                    else
+                      OutlinedButton.icon(
+                        onPressed: catalogo.cargando ? null : catalogo.cargar,
+                        icon: const Icon(Icons.refresh, size: 18),
+                        label: const Text('Actualizar'),
+                      ),
                   ],
                 ),
               ),
             ),
             if (catalogo.cargando)
-              const SliverToBoxAdapter(
+              SliverToBoxAdapter(
                 child: PageBody(
-                  child: Padding(padding: EdgeInsets.symmetric(horizontal: 24), child: LinearProgressIndicator()),
+                  child: Padding(
+                      padding: EdgeInsets.symmetric(horizontal: compacto ? 16 : 24),
+                      child: const LinearProgressIndicator()),
                 ),
               ),
             ..._contenido(context, catalogo, carrito, visibles),
@@ -121,49 +131,67 @@ class _CatalogScreenState extends State<CatalogScreen> {
       SliverToBoxAdapter(
         child: PageBody(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 290,
-                mainAxisExtent: 292,
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
-              ),
-              itemCount: visibles.length,
-              itemBuilder: (context, i) {
-                final p = visibles[i];
-                return ProductoTile(
-                  key: ValueKey(p.id),
-                  producto: p,
-                  enCarrito: carrito.cantidadDe(p.id),
-                  onAgregar: (cantidad) {
-                    carrito.agregar(p, cantidad);
-                    ScaffoldMessenger.of(context)
-                      ..hideCurrentSnackBar()
-                      ..showSnackBar(SnackBar(
-                        content: Row(children: [
-                          const Icon(Icons.check_circle, color: Colors.white, size: 18),
-                          const SizedBox(width: 10),
-                          Expanded(child: Text('${p.nombre} agregado al carrito')),
-                        ]),
-                        action: SnackBarAction(
-                          label: 'Ver carrito',
-                          textColor: const Color(0xFF9FE3D0),
-                          onPressed: () => Navigator.of(context)
-                              .push(MaterialPageRoute(builder: (_) => const CartScreen())),
-                        ),
-                        duration: const Duration(seconds: 3),
-                        persist: false, // con acción, por defecto no se cierra solo
-                      ));
-                  },
-                );
-              },
-            ),
+            padding: EdgeInsets.symmetric(horizontal: Breakpoints.esCompacto(context) ? 16 : 24),
+            child: LayoutBuilder(builder: (context, constraints) {
+              // Columnas según el ancho real: 1 en celular, 2 en tablet, hasta 4 en escritorio.
+              const anchoMinimoTarjeta = 250.0, separacion = 16.0;
+              final columnas =
+                  ((constraints.maxWidth + separacion) / (anchoMinimoTarjeta + separacion)).floor().clamp(1, 4);
+              // Filas armadas a mano en lugar de GridView: la altura sale del contenido (nombres largos,
+              // etiquetas que bajan de línea) y todas las tarjetas de una misma fila quedan iguales.
+              return Column(
+                children: [
+                  for (var inicio = 0; inicio < visibles.length; inicio += columnas) ...[
+                    if (inicio > 0) const SizedBox(height: separacion),
+                    IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          for (var c = 0; c < columnas; c++) ...[
+                            if (c > 0) const SizedBox(width: separacion),
+                            Expanded(
+                              child: inicio + c < visibles.length
+                                  ? _tarjeta(context, carrito, visibles[inicio + c])
+                                  : const SizedBox.shrink(),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              );
+            }),
           ),
         ),
       ),
     ];
+  }
+
+  Widget _tarjeta(BuildContext context, CartController carrito, Producto p) {
+    return ProductoTile(
+      key: ValueKey(p.id),
+      producto: p,
+      enCarrito: carrito.cantidadDe(p.id),
+      onAgregar: (cantidad) {
+        carrito.agregar(p, cantidad);
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(
+            content: Row(children: [
+              const Icon(Icons.check_circle, color: Colors.white, size: 18),
+              const SizedBox(width: 10),
+              Expanded(child: Text('${p.nombre} agregado al carrito')),
+            ]),
+            action: SnackBarAction(
+              label: 'Ver carrito',
+              textColor: const Color(0xFF9FE3D0),
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CartScreen())),
+            ),
+            duration: const Duration(seconds: 3),
+            persist: false, // con acción, por defecto no se cierra solo
+          ));
+      },
+    );
   }
 }
