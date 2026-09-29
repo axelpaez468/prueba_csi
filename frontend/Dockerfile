@@ -8,18 +8,23 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends git curl unzip xz-utils ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
+# Reintenta un comando de red: el DNS de Docker Desktop falla de forma intermitente durante builds
+# en paralelo ("Could not resolve host"), y sin esto un fallo momentáneo tumbaría todo el build.
+RUN printf '#!/bin/sh\nfor i in 1 2 3 4 5; do "$@" && exit 0; echo "[reintento] fallo $i/5: $*" >&2; sleep $((i * 5)); done; exit 1\n' \
+      > /usr/local/bin/reintentar && chmod +x /usr/local/bin/reintentar
+
 RUN useradd --create-home builder
 USER builder
 WORKDIR /home/builder
 
-RUN git clone --depth 1 --branch ${FLUTTER_VERSION} https://github.com/flutter/flutter.git flutter
+RUN reintentar sh -c 'rm -rf flutter && git clone --depth 1 --branch ${FLUTTER_VERSION} https://github.com/flutter/flutter.git flutter'
 ENV PATH="/home/builder/flutter/bin:${PATH}"
 RUN flutter config --no-analytics --no-cli-animations \
-    && flutter precache --web
+    && reintentar flutter precache --web
 
 WORKDIR /home/builder/app
 COPY --chown=builder pubspec.yaml pubspec.lock ./
-RUN flutter pub get
+RUN reintentar flutter pub get
 
 COPY --chown=builder . .
 
