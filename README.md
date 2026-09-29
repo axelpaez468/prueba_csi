@@ -165,6 +165,7 @@ cd frontend && flutter test    # 28 pruebas
 | Botón "Confirmar" deshabilitado y con indicador mientras se procesa; además, `CartController.confirmar()` ignora llamadas concurrentes. | Doble protección contra pedidos duplicados por doble clic. |
 | `API_URL` por `--dart-define`; si falta, la app muestra un aviso en lugar de fallar. | Configuración por entorno, sin URLs fijas. |
 | Build web con `--no-web-resources-cdn`. | CanvasKit se sirve desde el propio nginx: la app no depende de un CDN externo y funciona en redes cerradas. |
+| Fotos de producto incluidas como *assets* (`frontend/assets/productos`), elegidas según el tipo de producto (teclado, mouse, monitor...), con ícono genérico como respaldo. | Sin dependencia de un servicio externo de imágenes en tiempo de ejecución. Son fotos de Wikimedia Commons con licencia libre; autor y licencia de cada una en [`CREDITOS.md`](frontend/assets/productos/CREDITOS.md). |
 
 ### Docker
 
