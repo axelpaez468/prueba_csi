@@ -64,22 +64,40 @@ class _PanelMarca extends StatelessWidget {
     final theme = Theme.of(context);
     const blanco70 = Color(0xB3FFFFFF);
 
+    // Foto de un almacén de fondo, con un velo azul degradado encima: aporta contexto (inventario, pedidos)
+    // sin competir con el texto, que necesita contraste suficiente para leerse en blanco.
     return Container(
       decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [AppColors.primary, AppColors.primaryDark],
+        color: AppColors.primaryDark,
+        image: DecorationImage(
+          image: AssetImage('assets/fondos/login-almacen.jpg'),
+          fit: BoxFit.cover,
         ),
       ),
-      // Desplazable y con altura mínima = pantalla: en ventanas bajas no se desborda.
-      child: LayoutBuilder(
-        builder: (context, constraints) => SingleChildScrollView(
-          padding: const EdgeInsets.all(48),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: constraints.maxHeight - 96),
-            child: IntrinsicHeight(child: _contenido(theme, blanco70)),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              AppColors.primary.withValues(alpha: 0.74),
+              AppColors.primaryDark.withValues(alpha: 0.90),
+            ],
           ),
+        ),
+        child: _cuerpo(theme, blanco70),
+      ),
+    );
+  }
+
+  // Desplazable y con altura mínima = pantalla: en ventanas bajas no se desborda.
+  Widget _cuerpo(ThemeData theme, Color blanco70) {
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        padding: const EdgeInsets.all(48),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight - 96),
+          child: IntrinsicHeight(child: _contenido(theme, blanco70)),
         ),
       ),
     );
@@ -120,6 +138,9 @@ class _PanelMarca extends StatelessWidget {
           const Spacer(),
           Text('© ${DateTime.now().year} Sistema de Pedidos',
               style: theme.textTheme.bodySmall?.copyWith(color: blanco70)),
+          // Atribución que exige la licencia CC BY-SA 4.0 de la foto (detalle en assets/fondos/CREDITOS.md).
+          Text('Foto: WaterbedsRobbie, Wikimedia Commons · CC BY-SA 4.0',
+              style: theme.textTheme.labelSmall?.copyWith(color: Colors.white54)),
         ],
     );
   }
