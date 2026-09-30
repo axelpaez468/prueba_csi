@@ -69,7 +69,7 @@ public class AuthController : ControllerBase
         return Unauthorized(new ErrorResponse("Correo o contraseña incorrectos."));
     }
 
-    /// <summary>Paso 2: código de la app autenticadora, del SMS o de respaldo.</summary>
+    /// <summary>Paso 2: código de Google Authenticator o de respaldo (o el primero, si está configurando la app).</summary>
     [HttpPost("login/verificar")]
     [EnableRateLimiting(RateLimitPolicies.SegundoFactor)]
     [ProducesResponseType<LoginResponse>(StatusCodes.Status200OK)]
@@ -83,15 +83,6 @@ public class AuthController : ControllerBase
         return sesion is null
             ? Unauthorized(new ErrorResponse("El código no es correcto o ya expiró."))
             : Ok(sesion);
-    }
-
-    [HttpPost("login/reenviar")]
-    [EnableRateLimiting(RateLimitPolicies.SegundoFactor)]
-    [ProducesResponseType<MensajeResponse>(StatusCodes.Status200OK)]
-    public async Task<IActionResult> Reenviar(ReenviarCodigoRequest request, CancellationToken ct)
-    {
-        var destino = await _auth.ReenviarCodigoSmsAsync(request.Desafio, ct);
-        return Ok(new MensajeResponse($"Enviamos un nuevo código a {destino}."));
     }
 
     /// <summary>Siempre responde lo mismo, exista o no el correo (no revela qué cuentas existen).</summary>

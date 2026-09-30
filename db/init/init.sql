@@ -65,7 +65,7 @@ CREATE TABLE dbo.PedidoDetalle (
 GO
 
 -- =====================================================================
--- Login de ERP: correo, 2FA (app autenticadora / SMS), recuperación de contraseña y bitácora.
+-- Login de ERP: correo, 2FA con app autenticadora, recuperación de contraseña y bitácora.
 -- Migración incremental e idempotente: en una BD nueva agrega las columnas justo después de crear la
 -- tabla; en una BD existente las agrega sin perder datos.
 -- =====================================================================
@@ -76,24 +76,22 @@ IF COL_LENGTH(N'dbo.Usuarios', N'Telefono') IS NULL
 IF COL_LENGTH(N'dbo.Usuarios', N'DosFactor') IS NULL
     ALTER TABLE dbo.Usuarios ADD DosFactor NVARCHAR(10) NOT NULL
         CONSTRAINT DF_Usuarios_DosFactor DEFAULT (N'NINGUNO')
-        CONSTRAINT CK_Usuarios_DosFactor CHECK (DosFactor IN (N'NINGUNO', N'TOTP', N'SMS'));
+        CONSTRAINT CK_Usuarios_DosFactor CHECK (DosFactor IN (N'NINGUNO', N'TOTP'));
 IF COL_LENGTH(N'dbo.Usuarios', N'TotpSecretoCifrado') IS NULL
     ALTER TABLE dbo.Usuarios ADD TotpSecretoCifrado NVARCHAR(200) NULL;   -- AES-GCM, nunca en claro
 IF COL_LENGTH(N'dbo.Usuarios', N'TotpUltimoPaso') IS NULL
     ALTER TABLE dbo.Usuarios ADD TotpUltimoPaso BIGINT NULL;              -- anti-reutilización de códigos
 IF COL_LENGTH(N'dbo.Usuarios', N'TotpPendienteCifrado') IS NULL
     ALTER TABLE dbo.Usuarios ADD TotpPendienteCifrado NVARCHAR(200) NULL;
-IF COL_LENGTH(N'dbo.Usuarios', N'TelefonoPendiente') IS NULL
-    ALTER TABLE dbo.Usuarios ADD TelefonoPendiente NVARCHAR(20) NULL;
 IF COL_LENGTH(N'dbo.Usuarios', N'VersionSesion') IS NULL
     ALTER TABLE dbo.Usuarios ADD VersionSesion INT NOT NULL CONSTRAINT DF_Usuarios_VersionSesion DEFAULT (0);
 GO
 
--- BD existente con los usuarios originales: se les asigna correo, y el admin pasa a tener 2FA por SMS.
+-- BD existente con los usuarios originales: se les asigna correo, y el admin recibe su nueva contraseña.
 UPDATE dbo.Usuarios SET Email = LOWER(Username) + N'@pedidos.local' WHERE Email IS NULL;
 UPDATE dbo.Usuarios
    SET PasswordHash = N'$2a$11$E6LutlNGkp4N/dpe38.jW.ZfVU6YeW/D4mgxag/fpqIMZWisZA4FW',
-       DosFactor = N'SMS', Telefono = N'+50255550101', VersionSesion = VersionSesion + 1
+       Telefono = N'+50255550101', VersionSesion = VersionSesion + 1
  WHERE Username = N'admin' AND DosFactor = N'NINGUNO' AND Telefono IS NULL;
 GO
 
@@ -111,20 +109,6 @@ CREATE TABLE dbo.CodigosRespaldo (
     CodigoHash CHAR(64)  NOT NULL,   -- HMAC-SHA256: el código en claro solo lo ve el usuario una vez
     UsadoEn    DATETIME2 NULL,
     INDEX IX_CodigosRespaldo_UsuarioId (UsuarioId)
-);
-GO
-
-IF OBJECT_ID(N'dbo.CodigosVerificacion', N'U') IS NULL
-CREATE TABLE dbo.CodigosVerificacion (
-    Id         INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_CodigosVerificacion PRIMARY KEY,
-    UsuarioId  INT          NOT NULL CONSTRAINT FK_CodigosVerificacion_Usuarios REFERENCES dbo.Usuarios(Id) ON DELETE CASCADE,
-    Proposito  NVARCHAR(20) NOT NULL,
-    CodigoHash CHAR(64)     NOT NULL,
-    ExpiraEn   DATETIME2    NOT NULL,
-    Intentos   INT          NOT NULL CONSTRAINT DF_CodigosVerificacion_Intentos DEFAULT (0),
-    UsadoEn    DATETIME2    NULL,
-    CreadoEn   DATETIME2    NOT NULL,
-    INDEX IX_CodigosVerificacion_Usuario (UsuarioId, Proposito)
 );
 GO
 
@@ -223,15 +207,31 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UQ_Usuarios_CodigoCorpor
     CREATE UNIQUE INDEX UQ_Usuarios_CodigoCorporativo ON dbo.Usuarios(CodigoCorporativo);
 GO
 
+-- =====================================================================
+-- Se retira el 2FA por SMS: solo app autenticadora (Google Authenticator).
+-- Quien usaba SMS queda sin 2FA; los administradores deberán configurar la app en su próximo ingreso.
+-- =====================================================================
+IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_Usuarios_DosFactor' AND definition LIKE N'%SMS%')
+BEGIN
+    UPDATE dbo.Usuarios SET DosFactor = N'NINGUNO', VersionSesion = VersionSesion + 1 WHERE DosFactor = N'SMS';
+    ALTER TABLE dbo.Usuarios DROP CONSTRAINT CK_Usuarios_DosFactor;
+    ALTER TABLE dbo.Usuarios ADD CONSTRAINT CK_Usuarios_DosFactor CHECK (DosFactor IN (N'NINGUNO', N'TOTP'));
+END
+GO
+IF COL_LENGTH(N'dbo.Usuarios', N'TelefonoPendiente') IS NOT NULL
+    ALTER TABLE dbo.Usuarios DROP COLUMN TelefonoPendiente;
+IF OBJECT_ID(N'dbo.CodigosVerificacion', N'U') IS NOT NULL
+    DROP TABLE dbo.CodigosVerificacion;
+GO
 -- ---------- Datos semilla ----------
 -- Hashes BCrypt (work factor 11). Contraseñas de prueba documentadas en el README.
--- El admin tiene 2FA por SMS (obligatorio para su rol); los SMS se ven en la bandeja de Mailpit.
+-- El admin configura Google Authenticator en su primer inicio de sesión (el 2FA es obligatorio para su rol).
 IF NOT EXISTS (SELECT 1 FROM dbo.Usuarios)
 INSERT INTO dbo.Usuarios (Username, Nombre, Apellido, CodigoCorporativo, Email, PasswordHash, Rol, DosFactor, Telefono) VALUES
     (N'Vendedor Demo', N'Vendedor', N'Demo', N'VEN-0001', N'vendedor@pedidos.local',
      N'$2a$11$oFp4Su1EGJ.wZ2.Kt13t..t1cMYLEPasMvtAK/XKWj28ldCnZYb0q', N'VENDEDOR', N'NINGUNO', N'+50255550102'),
     (N'Administrador General', N'Administrador', N'General', N'ADM-0001', N'admin@pedidos.local',
-     N'$2a$11$E6LutlNGkp4N/dpe38.jW.ZfVU6YeW/D4mgxag/fpqIMZWisZA4FW', N'ADMIN', N'SMS', N'+50255550101');
+     N'$2a$11$E6LutlNGkp4N/dpe38.jW.ZfVU6YeW/D4mgxag/fpqIMZWisZA4FW', N'ADMIN', N'NINGUNO', N'+50255550101');
 GO
 
 IF NOT EXISTS (SELECT 1 FROM dbo.Productos)

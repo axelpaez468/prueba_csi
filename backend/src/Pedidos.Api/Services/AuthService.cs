@@ -102,18 +102,21 @@ public class AuthService
             return new LoginResultado(null, null, null, Desactivada: true);
         }
 
-        if (usuario.DosFactor != MetodosDosFactor.Ninguno && !await DispositivoConfiableAsync(usuario, tokenDispositivo, ct))
+        // 2FA obligatorio (administradores) y todavía sin configurar: debe configurar la app ahora para poder entrar.
+        if (usuario.DosFactor == MetodosDosFactor.Ninguno && usuario.DosFactorObligatorio)
         {
-            string? destino = null;
-            if (usuario.DosFactor == MetodosDosFactor.Sms)
-            {
-                await _segundoFactor.EnviarCodigoSmsAsync(usuario, usuario.Telefono!, PropositosCodigo.Login, ct,
-                    reusarReciente: true);
-                destino = SegundoFactorService.EnmascararTelefono(usuario.Telefono);
-            }
+            var (secreto, uri) = _segundoFactor.PrepararTotp(usuario);
+            _bitacora.Registrar(EventosBitacora.SegundoFactorRequerido, true, email, ctx, usuario.Id, "configuración obligatoria");
+            await _db.SaveChangesAsync(ct);
+            return new LoginResultado(null,
+                new DesafioResponse(_tokens.GenerarDesafio(usuario), MetodosDosFactor.Configurar, secreto, uri), null);
+        }
+
+        if (usuario.DosFactor == MetodosDosFactor.Totp && !await DispositivoConfiableAsync(usuario, tokenDispositivo, ct))
+        {
             _bitacora.Registrar(EventosBitacora.SegundoFactorRequerido, true, email, ctx, usuario.Id, usuario.DosFactor);
             await _db.SaveChangesAsync(ct);
-            return new LoginResultado(null, new DesafioResponse(_tokens.GenerarDesafio(usuario), usuario.DosFactor, destino), null);
+            return new LoginResultado(null, new DesafioResponse(_tokens.GenerarDesafio(usuario), MetodosDosFactor.Totp), null);
         }
 
         return new LoginResultado(await CompletarLoginAsync(usuario, ctx, null, ct), null, null);
@@ -136,13 +139,25 @@ public class AuthService
             throw new BusinessRuleException("Demasiados intentos o código ya utilizado. Inicia sesión de nuevo.");
 
         bool valido;
-        var usoRespaldo = SegundoFactorService.PareceCodigoRespaldo(codigo);
-        if (usoRespaldo)
+        List<string>? codigosNuevos = null;
+        var usoRespaldo = false;
+        if (usuario.DosFactor == MetodosDosFactor.Ninguno)
+        {
+            // Configuración obligatoria: el primer código de la app confirma el secreto y activa el 2FA.
+            codigosNuevos = await _segundoFactor.ActivarTotpPendienteAsync(usuario, codigo, ct);
+            valido = codigosNuevos is not null;
+            if (valido)
+                _bitacora.Registrar(EventosBitacora.DosFactorActivado, true, usuario.Email, ctx, usuario.Id, MetodosDosFactor.Totp);
+        }
+        else if (SegundoFactorService.PareceCodigoRespaldo(codigo))
+        {
+            usoRespaldo = true;
             valido = await _segundoFactor.UsarCodigoRespaldoAsync(usuario, codigo, ct);
-        else if (usuario.DosFactor == MetodosDosFactor.Totp)
-            valido = _segundoFactor.VerificarTotp(usuario, usuario.TotpSecretoCifrado!, codigo);
+        }
         else
-            valido = await _segundoFactor.VerificarCodigoSmsAsync(usuario, PropositosCodigo.Login, codigo, ct);
+        {
+            valido = _segundoFactor.VerificarTotp(usuario, usuario.TotpSecretoCifrado!, codigo);
+        }
 
         if (!valido)
         {
@@ -168,16 +183,9 @@ public class AuthService
             });
         }
 
-        return await CompletarLoginAsync(usuario, ctx, tokenDispositivo, ct);
-    }
-
-    public async Task<string> ReenviarCodigoSmsAsync(string? desafio, CancellationToken ct)
-    {
-        var (usuario, _) = await ResolverDesafioAsync(desafio, ct);
-        if (usuario.DosFactor != MetodosDosFactor.Sms)
-            throw new BusinessRuleException("Tu cuenta no usa verificación por SMS.");
-        await _segundoFactor.EnviarCodigoSmsAsync(usuario, usuario.Telefono!, PropositosCodigo.Login, ct);
-        return SegundoFactorService.EnmascararTelefono(usuario.Telefono);
+        var sesion = await CompletarLoginAsync(usuario, ctx, tokenDispositivo, ct);
+        // Tras configurar la app se entregan los códigos de respaldo (se muestran una sola vez).
+        return codigosNuevos is null ? sesion : sesion with { CodigosRespaldo = codigosNuevos };
     }
 
     // ---------- Auxiliares ----------
@@ -194,8 +202,10 @@ public class AuthService
                     ?? throw new BusinessRuleException("La verificación expiró. Inicia sesión de nuevo.");
         var usuario = await _db.Usuarios.FirstOrDefaultAsync(u => u.Id == datos.UsuarioId, ct);
         // Si la contraseña o el 2FA cambiaron después de emitir el desafío, ya no es válido.
-        if (usuario is null || !usuario.Activo || usuario.VersionSesion != datos.VersionSesion
-            || usuario.DosFactor == MetodosDosFactor.Ninguno)
+        // Sin 2FA solo es válido si es la configuración obligatoria (con un secreto pendiente de confirmar).
+        var sinSegundoFactor = usuario?.DosFactor == MetodosDosFactor.Ninguno
+                               && !(usuario.DosFactorObligatorio && usuario.TotpPendienteCifrado is not null);
+        if (usuario is null || !usuario.Activo || usuario.VersionSesion != datos.VersionSesion || sinSegundoFactor)
             throw new BusinessRuleException("La verificación expiró. Inicia sesión de nuevo.");
         return (usuario, datos.DesafioId);
     }

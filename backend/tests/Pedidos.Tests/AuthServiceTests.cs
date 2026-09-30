@@ -17,12 +17,12 @@ public class AuthServiceTests : IDisposable
     [Fact]
     public async Task Login_ConCorreoYContrasenaValidos_DevuelveTokenConRolCorreoYVersionDeSesion()
     {
-        var resultado = await Login(TestDb.EmailAdmin, TestDb.PasswordDePrueba);
+        var resultado = await Login(TestDb.EmailVendedor, TestDb.PasswordDePrueba);
 
         Assert.NotNull(resultado.Sesion);
         var token = new JwtSecurityTokenHandler().ReadJwtToken(resultado.Sesion.Token);
-        Assert.Equal("ADMIN", token.Claims.Single(c => c.Type == JwtClaims.Role).Value);
-        Assert.Equal(TestDb.EmailAdmin, token.Claims.Single(c => c.Type == JwtClaims.Email).Value);
+        Assert.Equal("VENDEDOR", token.Claims.Single(c => c.Type == JwtClaims.Role).Value);
+        Assert.Equal(TestDb.EmailVendedor, token.Claims.Single(c => c.Type == JwtClaims.Email).Value);
         Assert.Equal("0", token.Claims.Single(c => c.Type == JwtClaims.VersionSesion).Value);
         Assert.True(token.ValidTo > DateTime.UtcNow);
     }
@@ -30,7 +30,7 @@ public class AuthServiceTests : IDisposable
     [Fact]
     public async Task Login_IgnoraMayusculasYEspaciosEnElCorreo()
     {
-        Assert.NotNull((await Login("  ADMIN@Pedidos.TEST ", TestDb.PasswordDePrueba)).Sesion);
+        Assert.NotNull((await Login("  VENDEDOR@Pedidos.TEST ", TestDb.PasswordDePrueba)).Sesion);
     }
 
     [Theory]

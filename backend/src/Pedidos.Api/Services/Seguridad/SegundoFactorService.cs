@@ -1,104 +1,37 @@
 using Microsoft.EntityFrameworkCore;
 using Pedidos.Api.Data;
 using Pedidos.Api.Domain;
-using Pedidos.Api.Errors;
-using Pedidos.Api.Notificaciones;
 using Pedidos.Api.Security;
 
 namespace Pedidos.Api.Services.Seguridad;
 
-/// <summary>Verificación de códigos del segundo factor: TOTP, SMS y códigos de respaldo.</summary>
+/// <summary>Segundo factor: códigos de la app autenticadora (TOTP) y códigos de respaldo.</summary>
 public class SegundoFactorService
 {
     public const int CantidadCodigosRespaldo = 10;
-    public static readonly TimeSpan VigenciaCodigoSms = TimeSpan.FromMinutes(5);
-    public static readonly TimeSpan EsperaReenvioSms = TimeSpan.FromSeconds(30);
-    public const int IntentosPorCodigoSms = 5;
 
     private readonly AppDbContext _db;
     private readonly Cifrador _cifrador;
     private readonly TotpService _totp;
-    private readonly IEnviadorSms _sms;
     private readonly TimeProvider _time;
 
-    public SegundoFactorService(AppDbContext db, Cifrador cifrador, TotpService totp, IEnviadorSms sms, TimeProvider time)
+    public SegundoFactorService(AppDbContext db, Cifrador cifrador, TotpService totp, TimeProvider time)
     {
         _db = db;
         _cifrador = cifrador;
         _totp = totp;
-        _sms = sms;
         _time = time;
     }
 
-    private DateTime Ahora => _time.GetUtcNow().UtcDateTime;
-
-    public static string EnmascararTelefono(string? telefono) =>
-        string.IsNullOrEmpty(telefono) || telefono.Length < 4
-            ? "•••"
-            : $"{telefono[..Math.Min(4, telefono.Length - 4)]} •••• {telefono[^4..]}";
-
-    // ---------- SMS ----------
-
-    /// <summary>
-    /// Genera un código de 6 dígitos, invalida los anteriores del mismo propósito y lo envía.
-    /// Si ya se envió uno hace menos de 30 s: con <paramref name="reusarReciente"/> (reintento de login) no se envía
-    /// otro y sigue valiendo el anterior; sin él (botón "reenviar") se rechaza para evitar abuso de SMS.
-    /// </summary>
-    public async Task EnviarCodigoSmsAsync(Usuario usuario, string telefono, string proposito, CancellationToken ct,
-        bool reusarReciente = false)
-    {
-        var anterior = await _db.CodigosVerificacion
-            .Where(c => c.UsuarioId == usuario.Id && c.Proposito == proposito && c.UsadoEn == null && c.ExpiraEn > Ahora)
-            .OrderByDescending(c => c.CreadoEn)
-            .FirstOrDefaultAsync(ct);
-        if (anterior is not null && Ahora - anterior.CreadoEn < EsperaReenvioSms)
-        {
-            if (reusarReciente) return;
-            throw new BusinessRuleException(
-                $"Espera {EsperaReenvioSms.TotalSeconds:0} segundos antes de solicitar otro código.");
-        }
-
-        await _db.CodigosVerificacion
-            .Where(c => c.UsuarioId == usuario.Id && c.Proposito == proposito && c.UsadoEn == null)
-            .ExecuteUpdateAsync(s => s.SetProperty(c => c.UsadoEn, Ahora), ct);
-
-        var codigo = Aleatorio.CodigoNumerico();
-        _db.CodigosVerificacion.Add(new CodigoVerificacion
-        {
-            UsuarioId = usuario.Id,
-            Proposito = proposito,
-            CodigoHash = _cifrador.Huella($"{usuario.Id}:{proposito}:{codigo}"),
-            ExpiraEn = Ahora + VigenciaCodigoSms,
-            CreadoEn = Ahora
-        });
-        await _db.SaveChangesAsync(ct);
-
-        _sms.Encolar(telefono,
-            $"Sistema de Pedidos: tu código de verificación es {codigo}. Vence en {VigenciaCodigoSms.TotalMinutes:0} minutos. " +
-            "No lo compartas con nadie.");
-    }
-
-    public async Task<bool> VerificarCodigoSmsAsync(Usuario usuario, string proposito, string codigo, CancellationToken ct)
-    {
-        var vigente = await _db.CodigosVerificacion
-            .Where(c => c.UsuarioId == usuario.Id && c.Proposito == proposito && c.UsadoEn == null && c.ExpiraEn > Ahora)
-            .OrderByDescending(c => c.CreadoEn)
-            .FirstOrDefaultAsync(ct);
-        if (vigente is null || vigente.Intentos >= IntentosPorCodigoSms)
-            return false;
-
-        if (!_cifrador.CoincideHuella($"{usuario.Id}:{proposito}:{codigo.Trim()}", vigente.CodigoHash))
-        {
-            vigente.Intentos++;
-            await _db.SaveChangesAsync(ct);
-            return false;
-        }
-
-        vigente.UsadoEn = Ahora;
-        return true;
-    }
-
     // ---------- TOTP ----------
+
+    /// <summary>Genera un secreto nuevo y lo deja pendiente (cifrado) hasta que el usuario confirme un código.</summary>
+    public (string Secreto, string Uri) PrepararTotp(Usuario usuario)
+    {
+        var (secreto, uri) = _totp.Generar(usuario.Email);
+        usuario.TotpPendienteCifrado = _cifrador.Cifrar(secreto);
+        return (secreto, uri);
+    }
 
     public bool VerificarTotp(Usuario usuario, string secretoCifrado, string codigo)
     {
@@ -106,6 +39,19 @@ public class SegundoFactorService
             return false;
         usuario.TotpUltimoPaso = paso;
         return true;
+    }
+
+    /// <summary>Confirma el secreto pendiente con un código de la app y activa el 2FA. Devuelve los códigos de respaldo.</summary>
+    public async Task<List<string>?> ActivarTotpPendienteAsync(Usuario usuario, string codigo, CancellationToken ct)
+    {
+        if (usuario.TotpPendienteCifrado is null) return null;
+        usuario.TotpUltimoPaso = null;
+        if (!VerificarTotp(usuario, usuario.TotpPendienteCifrado, codigo)) return null;
+
+        usuario.TotpSecretoCifrado = usuario.TotpPendienteCifrado;
+        usuario.TotpPendienteCifrado = null;
+        usuario.DosFactor = MetodosDosFactor.Totp;
+        return await RegenerarCodigosRespaldoAsync(usuario, ct);
     }
 
     // ---------- Códigos de respaldo ----------
@@ -130,7 +76,7 @@ public class SegundoFactorService
         var guardado = await _db.CodigosRespaldo
             .FirstOrDefaultAsync(c => c.UsuarioId == usuario.Id && c.CodigoHash == huella && c.UsadoEn == null, ct);
         if (guardado is null) return false;
-        guardado.UsadoEn = Ahora;
+        guardado.UsadoEn = _time.GetUtcNow().UtcDateTime;
         return true;
     }
 

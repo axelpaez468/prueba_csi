@@ -36,17 +36,6 @@ public class CuentaController : ControllerBase
     public Task<CodigosRespaldoResponse> ConfirmarTotp(ConfirmarCodigoRequest r, CancellationToken ct) =>
         _cuenta.ConfirmarTotpAsync(UsuarioId, r.Codigo, Cliente, ct);
 
-    [HttpPost("2fa/sms")]
-    public async Task<MensajeResponse> IniciarSms(IniciarSmsRequest r, CancellationToken ct)
-    {
-        await _cuenta.IniciarSmsAsync(UsuarioId, r.Telefono, ct);
-        return new MensajeResponse("Te enviamos un código por SMS.");
-    }
-
-    [HttpPost("2fa/sms/confirmar")]
-    public Task<CodigosRespaldoResponse> ConfirmarSms(ConfirmarCodigoRequest r, CancellationToken ct) =>
-        _cuenta.ConfirmarSmsAsync(UsuarioId, r.Codigo, Cliente, ct);
-
     [HttpPost("2fa/desactivar")]
     public Task<LoginResponse> Desactivar(ConfirmarPasswordRequest r, CancellationToken ct) =>
         _cuenta.DesactivarAsync(UsuarioId, r.Password, Cliente, ct);

@@ -13,7 +13,6 @@ public class AppDbContext : DbContext
     public DbSet<Pedido> Pedidos => Set<Pedido>();
     public DbSet<PedidoDetalle> PedidoDetalles => Set<PedidoDetalle>();
     public DbSet<CodigoRespaldo> CodigosRespaldo => Set<CodigoRespaldo>();
-    public DbSet<CodigoVerificacion> CodigosVerificacion => Set<CodigoVerificacion>();
     public DbSet<TokenRecuperacion> TokensRecuperacion => Set<TokenRecuperacion>();
     public DbSet<DispositivoConfiable> DispositivosConfiables => Set<DispositivoConfiable>();
     public DbSet<DispositivoConocido> DispositivosConocidos => Set<DispositivoConocido>();
@@ -26,7 +25,7 @@ public class AppDbContext : DbContext
             e.ToTable("Usuarios", t =>
             {
                 t.HasCheckConstraint("CK_Usuarios_Rol", "Rol IN ('VENDEDOR','ADMIN')");
-                t.HasCheckConstraint("CK_Usuarios_DosFactor", "DosFactor IN ('NINGUNO','TOTP','SMS')");
+                t.HasCheckConstraint("CK_Usuarios_DosFactor", "DosFactor IN ('NINGUNO','TOTP')");
             });
             e.Property(u => u.Username).HasMaxLength(130).IsRequired();
             e.Property(u => u.Nombre).HasMaxLength(60).IsRequired();
@@ -37,11 +36,11 @@ public class AppDbContext : DbContext
             e.Property(u => u.PasswordHash).HasMaxLength(100).IsRequired();
             e.Property(u => u.Rol).HasMaxLength(20).IsRequired();
             e.Property(u => u.Telefono).HasMaxLength(20);
-            e.Property(u => u.TelefonoPendiente).HasMaxLength(20);
             e.Property(u => u.DosFactor).HasMaxLength(10).IsRequired();
             e.Property(u => u.TotpSecretoCifrado).HasMaxLength(200);
             e.Property(u => u.TotpPendienteCifrado).HasMaxLength(200);
             e.HasIndex(u => u.Email).IsUnique();
+            e.Ignore(u => u.DosFactorObligatorio);
             e.HasIndex(u => u.CodigoCorporativo).IsUnique();
         });
 
@@ -51,15 +50,6 @@ public class AppDbContext : DbContext
             e.Property(c => c.CodigoHash).HasMaxLength(64).IsRequired();
             e.HasOne<Usuario>().WithMany().HasForeignKey(c => c.UsuarioId).OnDelete(DeleteBehavior.Cascade);
             e.HasIndex(c => c.UsuarioId);
-        });
-
-        model.Entity<CodigoVerificacion>(e =>
-        {
-            e.ToTable("CodigosVerificacion");
-            e.Property(c => c.Proposito).HasMaxLength(20).IsRequired();
-            e.Property(c => c.CodigoHash).HasMaxLength(64).IsRequired();
-            e.HasOne<Usuario>().WithMany().HasForeignKey(c => c.UsuarioId).OnDelete(DeleteBehavior.Cascade);
-            e.HasIndex(c => new { c.UsuarioId, c.Proposito });
         });
 
         model.Entity<TokenRecuperacion>(e =>

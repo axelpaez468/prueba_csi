@@ -1,6 +1,6 @@
 # Uso:  cp .env.example .env   (y cambiar los valores)
 #       docker compose up --build
-# Frontend: http://localhost:8080   API: http://localhost:5080   Correos y SMS de prueba: http://localhost:8025
+# Frontend: http://localhost:8080   API: http://localhost:5080   Correos de prueba: http://localhost:8025
 name: pedidos
 
 # Endurecimiento común: ningún proceso puede ganar privilegios (setuid) dentro del contenedor.
@@ -55,8 +55,6 @@ services:
       Correo__Usuario: ${CORREO_USUARIO:-}
       Correo__Password: ${CORREO_PASSWORD:-}
       Correo__Remitente: ${CORREO_REMITENTE:-no-responder@pedidos.local}
-      Sms__Proveedor: Simulado
-      Sms__DestinoSimulado: ${SMS_DESTINO_SIMULADO:-}
     ports:
       - "${API_PORT:-5080}:8080"
     depends_on:
@@ -76,7 +74,7 @@ services:
     pids_limit: 200
     restart: unless-stopped
 
-  # Bandeja de correo de pruebas (gratuita, de código abierto): atrapa los correos y los SMS simulados
+  # Bandeja de correo de pruebas (gratuita, de código abierto): atrapa los correos
   # y los muestra en http://localhost:8025. No envía nada a internet.
   mailpit:
     <<: *seguridad

@@ -24,12 +24,8 @@ builder.Services.Configure<JwtOptions>(config.GetSection(JwtOptions.Section));
 (config.GetSection(SeguridadOptions.Section).Get<SeguridadOptions>() ?? new SeguridadOptions()).Validar();
 builder.Services.Configure<SeguridadOptions>(config.GetSection(SeguridadOptions.Section));
 builder.Services.Configure<CorreoOptions>(config.GetSection(CorreoOptions.Section));
-builder.Services.Configure<SmsOptions>(config.GetSection(SmsOptions.Section));
 builder.Services.Configure<FrontendOptions>(config.GetSection(FrontendOptions.Section));
 
-var proveedorSms = config.GetSection(SmsOptions.Section).Get<SmsOptions>()?.Proveedor ?? "Simulado";
-if (proveedorSms != "Simulado")
-    throw new InvalidOperationException($"Proveedor de SMS no soportado: {proveedorSms}. Use 'Simulado'.");
 
 var connectionString = config.GetConnectionString("Default");
 if (string.IsNullOrWhiteSpace(connectionString))
@@ -80,7 +76,6 @@ builder.Services.AddHttpClient<IVerificadorPasswordFiltrada, HibpVerificador>(c 
 });
 builder.Services.AddSingleton<ColaNotificaciones>();
 builder.Services.AddSingleton<IEnviadorCorreo>(sp => sp.GetRequiredService<ColaNotificaciones>());
-builder.Services.AddSingleton<IEnviadorSms, SmsSimulado>();
 builder.Services.AddHostedService<ProcesadorNotificaciones>();
 
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();

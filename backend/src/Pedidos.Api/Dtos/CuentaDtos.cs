@@ -3,15 +3,12 @@ namespace Pedidos.Api.Dtos;
 public record EstadoSeguridadResponse(
     string Email,
     string Metodo,
-    string? TelefonoEnmascarado,
     int CodigosRespaldoRestantes,
     bool DosFactorObligatorio);
 
 public record CambiarPasswordRequest(string? Actual, string? Nueva);
 
 public record IniciarTotpResponse(string Secreto, string Uri);
-
-public record IniciarSmsRequest(string? Telefono);
 
 public record ConfirmarCodigoRequest(string? Codigo);
 

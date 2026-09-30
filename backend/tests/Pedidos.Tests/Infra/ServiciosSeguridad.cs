@@ -18,10 +18,6 @@ public class CorreoFalso : IEnviadorCorreo
 
     public void Encolar(string para, string asunto, string texto) => Enviados.Add(new Mensaje(para, asunto, texto));
 
-    /// <summary>Último código de 6 dígitos enviado por SMS simulado.</summary>
-    public string UltimoCodigoSms() =>
-        Regex.Match(Enviados.Last(m => m.Para.EndsWith("@sms.simulado")).Texto, @"\b(\d{6})\b").Groups[1].Value;
-
     public string UltimoTokenRecuperacion() =>
         Regex.Match(Enviados.Last(m => m.Asunto.Contains("Restablece")).Texto, @"restablecer=([\w-]+)").Groups[1].Value;
 
@@ -66,7 +62,7 @@ public sealed class ServiciosSeguridad
     public TokenService Tokens => new(_jwt, Reloj);
 
     private SegundoFactorService SegundoFactor(AppDbContext db) =>
-        new(db, Cifrador, Totp, new SmsSimulado(Correo, Options.Create(new SmsOptions())), Reloj);
+        new(db, Cifrador, Totp, Reloj);
 
     public AuthService Auth(AppDbContext db) =>
         new(db, Tokens, Throttle, new BitacoraService(db, Reloj), SegundoFactor(db), Cifrador, Correo, Cache, Reloj);

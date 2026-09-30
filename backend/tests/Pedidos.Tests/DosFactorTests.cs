@@ -29,13 +29,6 @@ public class DosFactorTests : IDisposable
         return (inicio.Secreto, respaldo.CodigosRespaldo);
     }
 
-    private async Task ActivarSms(int usuarioId)
-    {
-        await _s.Cuenta(_testDb.CrearContexto()).IniciarSmsAsync(usuarioId, "+50255550101", default);
-        await _s.Cuenta(_testDb.CrearContexto()).ConfirmarSmsAsync(usuarioId, _s.Correo.UltimoCodigoSms(), _s.Contexto, default);
-        _s.Reloj.Advance(TimeSpan.FromMinutes(1)); // pasa la espera de reenvío antes del login
-    }
-
     // ---------- TOTP ----------
 
     [Fact]
@@ -85,60 +78,51 @@ public class DosFactorTests : IDisposable
         Assert.NotNull((await Login(TestDb.EmailVendedor)).Sesion); // sigue sin 2FA
     }
 
-    // ---------- SMS ----------
+    // ---------- Configuración obligatoria (administradores) ----------
 
     [Fact]
-    public async Task Sms_ElLoginEnviaUnCodigo_YSoloEseCodigoFunciona()
+    public async Task Admin_SinAppConfigurada_ElLoginLeExigeConfigurarla_ConElQR()
     {
-        await ActivarSms(TestDb.VendedorId);
+        var paso1 = await Login(TestDb.EmailAdmin);
 
-        var paso1 = await Login(TestDb.EmailVendedor);
-        Assert.Equal(MetodosDosFactor.Sms, paso1.Desafio!.Metodo);
-        Assert.Equal("+502 •••• 0101", paso1.Desafio.Destino);
-
-        Assert.Null(await Verificar(paso1.Desafio.Desafio, "123456"));
-        Assert.NotNull(await Verificar(paso1.Desafio.Desafio, _s.Correo.UltimoCodigoSms()));
+        Assert.Null(paso1.Sesion);
+        Assert.Equal(MetodosDosFactor.Configurar, paso1.Desafio!.Metodo);
+        Assert.False(string.IsNullOrEmpty(paso1.Desafio.Secreto));
+        Assert.StartsWith("otpauth://totp/", paso1.Desafio.Uri);
     }
 
     [Fact]
-    public async Task Sms_ElCodigoVenceALosCincoMinutos()
+    public async Task Admin_ConfiguraLaAppEnElLogin_EntraYRecibeSusCodigosDeRespaldo()
     {
-        await ActivarSms(TestDb.VendedorId);
-        var paso1 = await Login(TestDb.EmailVendedor);
-        var codigo = _s.Correo.UltimoCodigoSms();
+        var paso1 = await Login(TestDb.EmailAdmin);
+        var codigo = new Totp(Base32Encoding.ToBytes(paso1.Desafio!.Secreto)).ComputeTotp();
 
-        _s.Reloj.Advance(TimeSpan.FromMinutes(6));
+        var sesion = await Verificar(paso1.Desafio.Desafio, codigo);
 
-        Assert.Null(await Verificar(paso1.Desafio!.Desafio, codigo));
+        Assert.NotNull(sesion);
+        Assert.Equal(10, sesion.CodigosRespaldo!.Count);
+        await using var db = _testDb.CrearContexto();
+        Assert.Equal(MetodosDosFactor.Totp, db.Usuarios.Single(u => u.Id == TestDb.AdminId).DosFactor);
+
+        // El siguiente login ya pide el código normal, no la configuración.
+        Assert.Equal(MetodosDosFactor.Totp, (await Login(TestDb.EmailAdmin)).Desafio!.Metodo);
     }
 
     [Fact]
-    public async Task Sms_ReintentarElLoginEnMenosDeTreintaSegundos_NoFalla_YSigueValiendoElMismoCodigo()
+    public async Task Admin_ConCodigoIncorrectoAlConfigurar_NoQuedaActivado()
     {
-        await ActivarSms(TestDb.VendedorId);
-        var primero = await Login(TestDb.EmailVendedor);
-        var codigo = _s.Correo.UltimoCodigoSms();
-        var smsEnviados = _s.Correo.Enviados.Count;
+        var paso1 = await Login(TestDb.EmailAdmin);
 
-        var segundo = await Login(TestDb.EmailVendedor); // el usuario volvió atrás y reintentó
+        Assert.Null(await Verificar(paso1.Desafio!.Desafio, "000000"));
 
-        Assert.NotNull(segundo.Desafio);
-        Assert.Equal(smsEnviados, _s.Correo.Enviados.Count); // no se envió otro SMS
-        Assert.NotNull(await Verificar(segundo.Desafio.Desafio, codigo));
-        Assert.NotNull(primero.Desafio);
+        await using var db = _testDb.CrearContexto();
+        Assert.Equal(MetodosDosFactor.Ninguno, db.Usuarios.Single(u => u.Id == TestDb.AdminId).DosFactor);
     }
 
     [Fact]
-    public async Task Sms_NoSePuedeReenviarAntesDeTreintaSegundos()
+    public async Task Vendedor_SinApp_EntraDirecto_PorqueParaElEsOpcional()
     {
-        await ActivarSms(TestDb.VendedorId);
-        var paso1 = await Login(TestDb.EmailVendedor);
-
-        await Assert.ThrowsAsync<BusinessRuleException>(() =>
-            _s.Auth(_testDb.CrearContexto()).ReenviarCodigoSmsAsync(paso1.Desafio!.Desafio, default));
-
-        _s.Reloj.Advance(TimeSpan.FromSeconds(31));
-        await _s.Auth(_testDb.CrearContexto()).ReenviarCodigoSmsAsync(paso1.Desafio!.Desafio, default);
+        Assert.NotNull((await Login(TestDb.EmailVendedor)).Sesion);
     }
 
     // ---------- Códigos de respaldo y dispositivo de confianza ----------
@@ -193,7 +177,7 @@ public class DosFactorTests : IDisposable
     [Fact]
     public async Task Admin_NoPuedeDesactivarEl2FA()
     {
-        await ActivarSms(TestDb.AdminId);
+        await ActivarTotp(TestDb.AdminId);
 
         await Assert.ThrowsAsync<BusinessRuleException>(() =>
             _s.Cuenta(_testDb.CrearContexto()).DesactivarAsync(TestDb.AdminId, TestDb.PasswordDePrueba, _s.Contexto, default));

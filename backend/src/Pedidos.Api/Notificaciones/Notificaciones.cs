@@ -32,33 +32,11 @@ public class CorreoOptions
     };
 }
 
-public class SmsOptions
-{
-    public const string Section = "Sms";
-
-    /// <summary>
-    /// "Simulado": los SMS se entregan en la bandeja de Mailpit (gratis, para pruebas).
-    /// Para producción se implementaría otro <see cref="IEnviadorSms"/> (p. ej. Twilio) y se cambia este valor.
-    /// </summary>
-    public string Proveedor { get; set; } = "Simulado";
-
-    /// <summary>
-    /// Correo donde se entregan los SMS simulados. Vacío: una dirección ficticia por teléfono
-    /// (sms-50255550101@sms.simulado), útil con Mailpit. Con un SMTP real (Gmail) debe ser un buzón existente.
-    /// </summary>
-    public string? DestinoSimulado { get; set; }
-}
-
 public record Mensaje(string Para, string Asunto, string Texto);
 
 public interface IEnviadorCorreo
 {
     void Encolar(string para, string asunto, string texto);
-}
-
-public interface IEnviadorSms
-{
-    void Encolar(string telefono, string texto);
 }
 
 /// <summary>
@@ -74,25 +52,6 @@ public class ColaNotificaciones : IEnviadorCorreo
 
     public void Encolar(string para, string asunto, string texto) =>
         _canal.Writer.TryWrite(new Mensaje(para, asunto, texto));
-}
-
-/// <summary>SMS simulado: se entrega como correo a una dirección ficticia, visible en la bandeja de Mailpit.</summary>
-public class SmsSimulado : IEnviadorSms
-{
-    private readonly IEnviadorCorreo _correo;
-    private readonly string? _destino;
-
-    public SmsSimulado(IEnviadorCorreo correo, IOptions<SmsOptions> opciones)
-    {
-        _correo = correo;
-        _destino = string.IsNullOrWhiteSpace(opciones.Value.DestinoSimulado) ? null : opciones.Value.DestinoSimulado.Trim();
-    }
-
-    public void Encolar(string telefono, string texto)
-    {
-        var digitos = new string(telefono.Where(char.IsDigit).ToArray());
-        _correo.Encolar(_destino ?? $"sms-{digitos}@sms.simulado", $"📱 SMS a {telefono}", texto);
-    }
 }
 
 /// <summary>Envía por SMTP los mensajes encolados, con reintentos.</summary>

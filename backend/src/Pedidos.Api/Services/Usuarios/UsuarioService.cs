@@ -96,8 +96,8 @@ public partial class UsuarioService
             Rol = datos.Rol,
             // Sin contraseña utilizable hasta que el usuario la cree desde la invitación.
             PasswordHash = MarcaSinContrasena + Guid.NewGuid().ToString("N"),
-            // Los administradores quedan protegidos con 2FA por SMS desde el primer día.
-            DosFactor = datos.Rol == Roles.Admin ? MetodosDosFactor.Sms : MetodosDosFactor.Ninguno,
+            // Sin 2FA al crearse: si es administrador, el login le exige configurar Google Authenticator al entrar.
+            DosFactor = MetodosDosFactor.Ninguno,
             CreadoEn = _time.GetUtcNow().UtcDateTime
         };
         _db.Usuarios.Add(usuario);
@@ -142,11 +142,8 @@ public partial class UsuarioService
         usuario.CodigoCorporativo = datos.Codigo;
         usuario.Rol = datos.Rol;
 
-        // Promovido a administrador: el 2FA es obligatorio para su rol.
-        if (usuario.Rol == Roles.Admin && usuario.DosFactor == MetodosDosFactor.Ninguno)
-            usuario.DosFactor = MetodosDosFactor.Sms;
-
         // Cambiar correo o rol cierra sus sesiones: el token lleva ambos datos y debe volver a emitirse.
+        // Si fue promovido a administrador, en su próximo ingreso deberá configurar Google Authenticator.
         if (cambiosSensibles)
             usuario.VersionSesion++;
 

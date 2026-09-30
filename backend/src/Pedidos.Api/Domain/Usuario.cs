@@ -27,7 +27,7 @@ public class Usuario
     public string PasswordHash { get; set; } = string.Empty;
     public string Rol { get; set; } = Roles.Vendedor;
 
-    /// <summary>Teléfono en formato E.164 (+50255550101): contacto y 2FA por SMS.</summary>
+    /// <summary>Teléfono de contacto en formato E.164 (+50255550101).</summary>
     public string? Telefono { get; set; }
 
     public string DosFactor { get; set; } = MetodosDosFactor.Ninguno;
@@ -40,7 +40,11 @@ public class Usuario
 
     /// <summary>Configuración de 2FA en curso (aún sin confirmar).</summary>
     public string? TotpPendienteCifrado { get; set; }
-    public string? TelefonoPendiente { get; set; }
+
+    /// <summary>
+    /// Los administradores no pueden operar sin segundo factor: si no lo tienen, el login los obliga a configurarlo.
+    /// </summary>
+    public bool DosFactorObligatorio => Rol == Roles.Admin;
 
     /// <summary>
     /// Se incrementa al cambiar la contraseña o el 2FA. Viaja en el JWT: los tokens emitidos antes

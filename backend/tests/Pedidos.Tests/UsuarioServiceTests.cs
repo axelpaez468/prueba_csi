@@ -58,11 +58,18 @@ public class UsuarioServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Crear_Administrador_QuedaCon2FAPorSms()
+    public async Task Crear_Administrador_DebeConfigurarGoogleAuthenticatorEnSuPrimerIngreso()
     {
-        var u = await Crear(Nuevo(rol: "ADMIN"));
+        await Crear(Nuevo(rol: "ADMIN"));
+        await _s.Recuperacion(_testDb.CrearContexto()).RestablecerAsync(
+            _s.Correo.UltimoTokenInvitacion("ana.lopez@empresa.gt"), "Mi-Clave-Nueva-2026", _s.Contexto, default);
 
-        Assert.Equal(MetodosDosFactor.Sms, u.DosFactor);
+        var login = await _s.Auth(_testDb.CrearContexto())
+            .LoginAsync("ana.lopez@empresa.gt", "Mi-Clave-Nueva-2026", null, _s.Contexto, default);
+
+        Assert.Null(login.Sesion);
+        Assert.Equal(MetodosDosFactor.Configurar, login.Desafio!.Metodo);
+        Assert.Contains(_s.Correo.Enviados, m => m.Texto.Contains("Google Authenticator"));
     }
 
     [Theory]
@@ -112,7 +119,6 @@ public class UsuarioServiceTests : IDisposable
 
         Assert.Equal("Carlos Pérez", u.NombreCompleto);
         Assert.Equal(Roles.Admin, u.Rol);
-        Assert.Equal(MetodosDosFactor.Sms, u.DosFactor); // al ser promovido a admin
         await using var db = _testDb.CrearContexto();
         Assert.Equal(1, db.Usuarios.Single(x => x.Id == TestDb.VendedorId).VersionSesion);
     }

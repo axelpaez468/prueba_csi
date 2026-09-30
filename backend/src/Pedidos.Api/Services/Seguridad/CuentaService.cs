@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Pedidos.Api.Data;
 using Pedidos.Api.Domain;
@@ -10,7 +9,7 @@ using Pedidos.Api.Security;
 namespace Pedidos.Api.Services.Seguridad;
 
 /// <summary>"Mi seguridad": contraseña, activación del 2FA, códigos de respaldo y accesos recientes.</summary>
-public partial class CuentaService
+public class CuentaService
 {
     private readonly AppDbContext _db;
     private readonly Cifrador _cifrador;
@@ -34,12 +33,6 @@ public partial class CuentaService
         _correo = correo;
     }
 
-    /// <summary>Los administradores no pueden quedarse sin segundo factor.</summary>
-    public static bool DosFactorObligatorio(Usuario u) => u.Rol == Roles.Admin;
-
-    [GeneratedRegex(@"^\+[1-9]\d{7,14}$")]
-    private static partial Regex TelefonoE164();
-
     private Task<Usuario> CargarAsync(int id, CancellationToken ct) => _db.Usuarios.FirstAsync(u => u.Id == id, ct);
 
     private static void ExigirPassword(Usuario u, string? password)
@@ -54,9 +47,8 @@ public partial class CuentaService
         return new EstadoSeguridadResponse(
             u.Email,
             u.DosFactor,
-            u.DosFactor == MetodosDosFactor.Sms ? SegundoFactorService.EnmascararTelefono(u.Telefono) : null,
             await _segundoFactor.CodigosRespaldoRestantesAsync(u.Id, ct),
-            DosFactorObligatorio(u));
+            u.DosFactorObligatorio);
     }
 
     // ---------- Contraseña ----------
@@ -83,13 +75,12 @@ public partial class CuentaService
         return _tokens.Generar(u);
     }
 
-    // ---------- 2FA con app autenticadora ----------
+    // ---------- 2FA con app autenticadora (Google Authenticator) ----------
 
     public async Task<IniciarTotpResponse> IniciarTotpAsync(int usuarioId, CancellationToken ct)
     {
         var u = await CargarAsync(usuarioId, ct);
-        var (secreto, uri) = _totp.Generar(u.Email);
-        u.TotpPendienteCifrado = _cifrador.Cifrar(secreto); // queda pendiente hasta que el usuario lo confirme
+        var (secreto, uri) = _segundoFactor.PrepararTotp(u); // queda pendiente hasta que el usuario lo confirme
         await _db.SaveChangesAsync(ct);
         return new IniciarTotpResponse(secreto, uri);
     }
@@ -100,62 +91,23 @@ public partial class CuentaService
         var u = await CargarAsync(usuarioId, ct);
         if (u.TotpPendienteCifrado is null)
             throw new BusinessRuleException("Primero genera el código QR.");
-        u.TotpUltimoPaso = null;
-        if (!_segundoFactor.VerificarTotp(u, u.TotpPendienteCifrado, codigo ?? ""))
-            throw new BusinessRuleException("El código no es correcto. Revisa la hora de tu teléfono e intenta de nuevo.");
+        var codigos = await _segundoFactor.ActivarTotpPendienteAsync(u, codigo ?? "", ct)
+                      ?? throw new BusinessRuleException("El código no es correcto. Revisa la hora de tu teléfono e intenta de nuevo.");
 
-        u.TotpSecretoCifrado = u.TotpPendienteCifrado;
-        u.TotpPendienteCifrado = null;
-        return await ActivarAsync(u, MetodosDosFactor.Totp, ctx, ct);
-    }
-
-    // ---------- 2FA por SMS ----------
-
-    public async Task IniciarSmsAsync(int usuarioId, string? telefono, CancellationToken ct)
-    {
-        telefono = new string((telefono ?? "").Where(c => c == '+' || char.IsDigit(c)).ToArray());
-        if (!TelefonoE164().IsMatch(telefono))
-            throw new BusinessRuleException("Ingresa el teléfono con código de país, por ejemplo +50255550101.");
-
-        var u = await CargarAsync(usuarioId, ct);
-        u.TelefonoPendiente = telefono;
-        await _db.SaveChangesAsync(ct);
-        await _segundoFactor.EnviarCodigoSmsAsync(u, telefono, PropositosCodigo.ActivarSms, ct);
-    }
-
-    public async Task<CodigosRespaldoResponse> ConfirmarSmsAsync(int usuarioId, string? codigo, ContextoCliente ctx,
-        CancellationToken ct)
-    {
-        var u = await CargarAsync(usuarioId, ct);
-        if (u.TelefonoPendiente is null)
-            throw new BusinessRuleException("Primero solicita el código por SMS.");
-        if (!await _segundoFactor.VerificarCodigoSmsAsync(u, PropositosCodigo.ActivarSms, codigo ?? "", ct))
-            throw new BusinessRuleException("El código no es correcto o expiró.");
-
-        u.Telefono = u.TelefonoPendiente;
-        u.TelefonoPendiente = null;
-        return await ActivarAsync(u, MetodosDosFactor.Sms, ctx, ct);
-    }
-
-    private async Task<CodigosRespaldoResponse> ActivarAsync(Usuario u, string metodo, ContextoCliente ctx, CancellationToken ct)
-    {
-        u.DosFactor = metodo;
-        var codigos = await _segundoFactor.RegenerarCodigosRespaldoAsync(u, ct);
-        _bitacora.Registrar(EventosBitacora.DosFactorActivado, true, u.Email, ctx, u.Id, metodo);
+        _bitacora.Registrar(EventosBitacora.DosFactorActivado, true, u.Email, ctx, u.Id, MetodosDosFactor.Totp);
         await _db.SaveChangesAsync(ct);
         _correo.Encolar(u.Email, "Verificación en dos pasos activada",
-            $"Hola {u.Username}:\n\nActivaste la verificación en dos pasos ({(metodo == MetodosDosFactor.Totp ? "app autenticadora" : "SMS")}). " +
+            $"Hola {u.Username}:\n\nActivaste la verificación en dos pasos con Google Authenticator. " +
             "Guarda tus códigos de respaldo en un lugar seguro.");
         return new CodigosRespaldoResponse(codigos);
     }
-
     // ---------- Desactivar y códigos de respaldo ----------
 
     /// <returns>Una sesión nueva (desactivar cierra las demás sesiones, incluida la versión anterior de esta).</returns>
     public async Task<LoginResponse> DesactivarAsync(int usuarioId, string? password, ContextoCliente ctx, CancellationToken ct)
     {
         var u = await CargarAsync(usuarioId, ct);
-        if (DosFactorObligatorio(u))
+        if (u.DosFactorObligatorio)
             throw new BusinessRuleException("La verificación en dos pasos es obligatoria para administradores.");
         ExigirPassword(u, password);
 

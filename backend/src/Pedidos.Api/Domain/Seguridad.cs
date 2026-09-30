@@ -1,10 +1,14 @@
 namespace Pedidos.Api.Domain;
 
+/// <summary>
+/// Segundo factor: solo app autenticadora (TOTP: Google Authenticator, Microsoft Authenticator...).
+/// "CONFIGURAR" no se guarda: es el método que devuelve el login cuando el 2FA es obligatorio y aún no está configurado.
+/// </summary>
 public static class MetodosDosFactor
 {
     public const string Ninguno = "NINGUNO";
     public const string Totp = "TOTP";
-    public const string Sms = "SMS";
+    public const string Configurar = "CONFIGURAR";
 }
 
 /// <summary>Códigos de respaldo del 2FA: de un solo uso, guardados como HMAC.</summary>
@@ -14,25 +18,6 @@ public class CodigoRespaldo
     public int UsuarioId { get; set; }
     public string CodigoHash { get; set; } = string.Empty;
     public DateTime? UsadoEn { get; set; }
-}
-
-public static class PropositosCodigo
-{
-    public const string Login = "LOGIN";
-    public const string ActivarSms = "ACTIVAR_SMS";
-}
-
-/// <summary>Código de 6 dígitos enviado por SMS (login o activación del 2FA).</summary>
-public class CodigoVerificacion
-{
-    public int Id { get; set; }
-    public int UsuarioId { get; set; }
-    public string Proposito { get; set; } = PropositosCodigo.Login;
-    public string CodigoHash { get; set; } = string.Empty;
-    public DateTime ExpiraEn { get; set; }
-    public int Intentos { get; set; }
-    public DateTime? UsadoEn { get; set; }
-    public DateTime CreadoEn { get; set; }
 }
 
 /// <summary>Enlace de recuperación de contraseña: de un solo uso y con vencimiento.</summary>

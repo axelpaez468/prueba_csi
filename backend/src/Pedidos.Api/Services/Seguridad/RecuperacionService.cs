@@ -79,8 +79,9 @@ public class RecuperacionService
             $"Hola {usuario.Nombre}:\n\nSe creó tu cuenta en el Sistema de Pedidos.\n\n" +
             $"  Correo de acceso: {usuario.Email}\n  Código corporativo: {usuario.CodigoCorporativo}\n  Rol: {usuario.Rol}\n\n" +
             $"Para activarla, crea tu contraseña con este enlace (vence en {VigenciaInvitacion.TotalHours:0} horas y funciona una sola vez):\n\n{enlace}\n\n" +
-            (usuario.DosFactor == MetodosDosFactor.Sms
-                ? "Por tu rol, al iniciar sesión te pediremos además un código enviado por SMS a tu teléfono registrado.\n"
+            (usuario.DosFactorObligatorio
+                ? "Por tu rol, en tu primer inicio de sesión configurarás la verificación en dos pasos con Google Authenticator " +
+                  "(descárgala gratis en tu teléfono).\n"
                 : "") +
             "Si no esperabas este correo, ignóralo.");
     }

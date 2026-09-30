@@ -9,21 +9,22 @@ Content-Type: application/json
 
 { "email": "vendedor@pedidos.local", "password": "Vendedor123!" }
 
-### 2. Login como admin (paso 1): tiene 2FA por SMS -> responde { requiereSegundoFactor, desafio, destino }
-# El SMS simulado llega a la bandeja de Mailpit: http://localhost:8025. Copia el código en @codigoSms.
+### 2. Login como admin (paso 1): 2FA con Google Authenticator -> { requiereSegundoFactor, desafio, metodo }
+# Si metodo = "CONFIGURAR" (primer ingreso), la respuesta trae "uri" y "secreto": agrégalos a Google Authenticator.
+# Luego copia en @codigoApp el código de 6 dígitos que muestra la app.
 # @name loginAdmin
 POST {{baseUrl}}/api/auth/login
 Content-Type: application/json
 
 { "email": "admin@pedidos.local", "password": "AdminPedidos2026!" }
 
-### 2b. Login como admin (paso 2): código del SMS
-@codigoSms = 000000
+### 2b. Login como admin (paso 2): código de Google Authenticator
+@codigoApp = 000000
 # @name verificarAdmin
 POST {{baseUrl}}/api/auth/login/verificar
 Content-Type: application/json
 
-{ "desafio": "{{loginAdmin.response.body.desafio}}", "codigo": "{{codigoSms}}", "confiarDispositivo": false }
+{ "desafio": "{{loginAdmin.response.body.desafio}}", "codigo": "{{codigoApp}}", "confiarDispositivo": false }
 
 ### 2c. Recuperar contraseña -> 202 (el enlace llega a Mailpit)
 POST {{baseUrl}}/api/auth/recuperar
