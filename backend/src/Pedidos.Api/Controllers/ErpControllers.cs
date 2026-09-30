@@ -226,3 +226,27 @@ public class PanelController : ControllerBase
     [HttpGet]
     public Task<PanelResponse> Resumen(CancellationToken ct) => _panel.ResumenAsync(ct);
 }
+
+/// <summary>Reportes de ventas. El vendedor ve solo sus ventas; ADMIN y CONTADOR, todas.</summary>
+[ApiController]
+[Route("api/reportes")]
+[Authorize(Roles = Roles.ConsultaVentas)]
+public class ReportesController : ControllerBase
+{
+    private readonly ReporteVentasService _reportes;
+    private readonly TimeProvider _time;
+
+    public ReportesController(ReporteVentasService reportes, TimeProvider time)
+    {
+        _reportes = reportes;
+        _time = time;
+    }
+
+    [HttpGet("ventas")]
+    public Task<ReporteVentasResponse> Ventas([FromQuery] DateOnly? desde, [FromQuery] DateOnly? hasta, CancellationToken ct)
+    {
+        var (d, h) = RangoPorDefecto.Resolver(desde, hasta, _time);
+        var veTodas = User.IsInRole(Roles.Admin) || User.IsInRole(Roles.Contador);
+        return _reportes.GenerarAsync(d, h, User.GetUsuarioId(), veTodas, ct);
+    }
+}

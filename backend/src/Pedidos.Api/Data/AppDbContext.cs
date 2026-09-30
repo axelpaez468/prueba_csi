@@ -1,4 +1,6 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Pedidos.Api.Domain;
 
 namespace Pedidos.Api.Data;
@@ -113,6 +115,21 @@ public class AppDbContext : DbContext
             e.Property(p => p.Nombre).HasMaxLength(100).IsRequired();
             e.Property(p => p.Precio).HasPrecision(18, 2);
             e.Property(p => p.CostoPromedio).HasPrecision(18, 4);
+            e.Property(p => p.Marca).HasMaxLength(60);
+            e.Property(p => p.Categoria).HasMaxLength(60);
+            e.Property(p => p.Descripcion).HasMaxLength(2000);
+            // Lista de especificaciones como JSON: se lee y se escribe siempre completa con el producto.
+            e.Property(p => p.Especificaciones)
+                .HasMaxLength(4000)
+                .HasConversion(
+                    v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+                    v => string.IsNullOrEmpty(v)
+                        ? new List<Especificacion>()
+                        : JsonSerializer.Deserialize<List<Especificacion>>(v, (JsonSerializerOptions?)null) ?? new List<Especificacion>(),
+                    new ValueComparer<List<Especificacion>>(
+                        (a, b) => a!.SequenceEqual(b!),
+                        v => v.Aggregate(0, (h, x) => HashCode.Combine(h, x.GetHashCode())),
+                        v => v.ToList()));
             e.HasIndex(p => p.Codigo).IsUnique();
         });
 

@@ -250,6 +250,21 @@ IF COL_LENGTH(N'dbo.Productos', N'Activo') IS NULL
     ALTER TABLE dbo.Productos ADD Activo BIT NOT NULL CONSTRAINT DF_Productos_Activo DEFAULT (1);
 GO
 
+-- Ficha del producto: marca, categoría, descripción detallada, garantía y especificaciones (JSON).
+IF COL_LENGTH(N'dbo.Productos', N'Marca') IS NULL
+    ALTER TABLE dbo.Productos ADD Marca NVARCHAR(60) NULL;
+IF COL_LENGTH(N'dbo.Productos', N'Categoria') IS NULL
+    ALTER TABLE dbo.Productos ADD Categoria NVARCHAR(60) NULL;
+IF COL_LENGTH(N'dbo.Productos', N'Descripcion') IS NULL
+    ALTER TABLE dbo.Productos ADD Descripcion NVARCHAR(2000) NULL;
+IF COL_LENGTH(N'dbo.Productos', N'GarantiaMeses') IS NULL
+    ALTER TABLE dbo.Productos ADD GarantiaMeses INT NOT NULL CONSTRAINT DF_Productos_GarantiaMeses DEFAULT (0)
+        CONSTRAINT CK_Productos_Garantia CHECK (GarantiaMeses BETWEEN 0 AND 120);
+IF COL_LENGTH(N'dbo.Productos', N'Especificaciones') IS NULL
+    ALTER TABLE dbo.Productos ADD Especificaciones NVARCHAR(4000) NOT NULL CONSTRAINT DF_Productos_Especificaciones DEFAULT (N'[]')
+        CONSTRAINT CK_Productos_Especificaciones CHECK (ISJSON(Especificaciones) = 1);
+GO
+
 IF OBJECT_ID(N'dbo.Clientes', N'U') IS NULL
 CREATE TABLE dbo.Clientes (
     Id        INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_Clientes PRIMARY KEY,
@@ -459,6 +474,37 @@ INSERT INTO dbo.Productos (Codigo, Nombre, Precio, Stock, CostoPromedio, StockMi
     (N'P-003', N'Monitor 27"',        2350.00,  1, 1450.00,  2),  -- stock 1: para probar la regla de concurrencia
     (N'P-004', N'Audífonos USB',       199.99, 12,  110.00,  5),
     (N'P-005', N'Webcam HD',           310.00,  0,  180.00,  3);  -- sin stock: se muestra deshabilitado en el catálogo
+GO
+
+-- Fichas de los productos semilla (solo si aún no tienen descripción; no pisa lo que se edite en la app).
+UPDATE p SET Marca = f.Marca, Categoria = f.Categoria, Descripcion = f.Descripcion, GarantiaMeses = f.Garantia,
+             Especificaciones = f.Especificaciones
+  FROM dbo.Productos p
+  JOIN (VALUES
+    (N'P-001', N'KeyForge', N'Periféricos', 12,
+     N'Teclado mecánico de tamaño completo pensado para jornadas largas de digitación y para gaming. Sus interruptores lineales rojos tienen un recorrido suave y silencioso, con una fuerza de activación de 45 g que reduce la fatiga de los dedos.' + NCHAR(10) + NCHAR(10) +
+     N'La estructura de aluminio le da firmeza y evita que se deslice en el escritorio. Las teclas de doble inyección no se borran con el uso, y la retroiluminación blanca tiene 5 niveles de brillo para trabajar de noche.' + NCHAR(10) + NCHAR(10) +
+     N'Incluye reposamuñecas desmontable, cable USB-C trenzado de 1.8 m y extractor de teclas. Distribución en español latinoamericano (con Ñ).',
+     N'[{"Nombre":"Interruptores","Valor":"Mecánicos lineales rojos, 45 g, 50 millones de pulsaciones"},{"Nombre":"Distribución","Valor":"Español latinoamericano, 105 teclas"},{"Nombre":"Conexión","Valor":"USB-C desmontable (cable trenzado de 1.8 m)"},{"Nombre":"Iluminación","Valor":"LED blanca, 5 niveles"},{"Nombre":"Anti-ghosting","Valor":"N-key rollover completo"},{"Nombre":"Material","Valor":"Placa de aluminio, teclas PBT de doble inyección"},{"Nombre":"Dimensiones","Valor":"44 x 13.5 x 3.8 cm"},{"Nombre":"Peso","Valor":"1.05 kg"},{"Nombre":"Compatibilidad","Valor":"Windows, macOS y Linux"}]'),
+    (N'P-002', N'Orion', N'Periféricos', 12,
+     N'Mouse inalámbrico ergonómico con doble conexión: receptor USB de 2.4 GHz para una respuesta sin retraso y Bluetooth para usarlo con laptop, tablet o teléfono. Cambia entre dispositivos con un botón.' + NCHAR(10) + NCHAR(10) +
+     N'Su sensor óptico de 4,000 DPI funciona sobre casi cualquier superficie, y los clics silenciosos lo hacen ideal para oficinas compartidas. La batería recargable dura hasta 70 días con una carga completa por USB-C.',
+     N'[{"Nombre":"Sensor","Valor":"Óptico, 800 a 4,000 DPI (4 niveles)"},{"Nombre":"Conexión","Valor":"Receptor USB 2.4 GHz y Bluetooth 5.1"},{"Nombre":"Botones","Valor":"6 (clic silencioso, rueda y 2 laterales)"},{"Nombre":"Batería","Valor":"Recargable 500 mAh, hasta 70 días"},{"Nombre":"Carga","Valor":"USB-C (cable incluido)"},{"Nombre":"Alcance","Valor":"Hasta 10 m"},{"Nombre":"Peso","Valor":"92 g"}]'),
+    (N'P-003', N'Vista', N'Monitores', 36,
+     N'Monitor de 27 pulgadas con panel IPS y resolución QHD (2560 x 1440): colores fieles desde cualquier ángulo y 77 % más espacio de trabajo que un monitor Full HD. Ideal para diseño, hojas de cálculo y trabajo con varias ventanas.' + NCHAR(10) + NCHAR(10) +
+     N'La tasa de refresco de 75 Hz y la tecnología FreeSync dan una imagen fluida, y el modo de luz azul reducida con pantalla sin parpadeo cuida la vista. La base ajusta altura, inclinación y giro, y es compatible con soportes VESA.',
+     N'[{"Nombre":"Tamaño","Valor":"27 pulgadas"},{"Nombre":"Panel","Valor":"IPS, antirreflejo"},{"Nombre":"Resolución","Valor":"2560 x 1440 (QHD)"},{"Nombre":"Frecuencia","Valor":"75 Hz con FreeSync"},{"Nombre":"Tiempo de respuesta","Valor":"5 ms"},{"Nombre":"Color","Valor":"99 % sRGB, 1,000:1"},{"Nombre":"Entradas","Valor":"2 HDMI 2.0, 1 DisplayPort 1.4, salida de audio"},{"Nombre":"Ergonomía","Valor":"Altura, inclinación, giro y pivote; VESA 100 x 100"},{"Nombre":"Consumo","Valor":"28 W típico"}]'),
+    (N'P-004', N'SonicWave', N'Audio', 6,
+     N'Audífonos USB con micrófono con cancelación de ruido, diseñados para videollamadas, clases en línea y centros de atención. Se conectan y funcionan al instante, sin instalar controladores.' + NCHAR(10) + NCHAR(10) +
+     N'Las almohadillas de espuma viscoelástica y la diadema acolchada permiten usarlos todo el día. El control en el cable sube o baja el volumen y silencia el micrófono, y el micrófono se retrae dentro de la diadema cuando no se usa.',
+     N'[{"Nombre":"Tipo","Valor":"Diadema, sobre la oreja, estéreo"},{"Nombre":"Conexión","Valor":"USB-A, cable de 2 m"},{"Nombre":"Micrófono","Valor":"Omnidireccional con cancelación de ruido, retráctil"},{"Nombre":"Respuesta","Valor":"20 Hz a 20 kHz"},{"Nombre":"Controles","Valor":"Volumen y silencio en el cable"},{"Nombre":"Peso","Valor":"180 g"},{"Nombre":"Certificación","Valor":"Compatible con Teams, Zoom y Meet"}]'),
+    (N'P-005', N'ClearCam', N'Video', 12,
+     N'Cámara web Full HD 1080p a 30 cuadros por segundo con enfoque automático y corrección de luz: se ve con nitidez incluso en oficinas con poca iluminación.' + NCHAR(10) + NCHAR(10) +
+     N'Trae dos micrófonos estéreo con reducción de ruido y una tapa de privacidad deslizable. El clip universal se ajusta a monitores y laptops, o se atornilla a un trípode.',
+     N'[{"Nombre":"Resolución","Valor":"1920 x 1080 a 30 fps"},{"Nombre":"Enfoque","Valor":"Automático"},{"Nombre":"Campo de visión","Valor":"78 grados"},{"Nombre":"Micrófono","Valor":"Doble, estéreo, con reducción de ruido"},{"Nombre":"Conexión","Valor":"USB-A, cable de 1.5 m"},{"Nombre":"Privacidad","Valor":"Tapa deslizable"},{"Nombre":"Montaje","Valor":"Clip universal y rosca para trípode"}]')
+  ) AS f (Codigo, Marca, Categoria, Garantia, Descripcion, Especificaciones)
+    ON f.Codigo = p.Codigo
+ WHERE p.Descripcion IS NULL;
 GO
 
 IF NOT EXISTS (SELECT 1 FROM dbo.Proveedores)

@@ -12,11 +12,28 @@ public record ProductoInventarioResponse(
     bool Activo,
     bool BajoMinimo,
     // Margen bruto sobre el precio sin IVA (%); null si el producto aún no tiene costo.
-    decimal? Margen);
+    decimal? Margen,
+    string? Marca,
+    string? Categoria,
+    string? Descripcion,
+    int GarantiaMeses,
+    List<EspecificacionDto> Especificaciones);
 
 /// <param name="Precio">Precio de venta con IVA incluido.</param>
 /// <param name="Codigo">Solo al crear; después no cambia (lo usan facturas y kardex).</param>
-public record GuardarProductoRequest(string? Codigo, string? Nombre, decimal Precio, int StockMinimo, bool? Activo);
+/// <param name="Descripcion">Descripción comercial; admite párrafos (hasta 2000 caracteres).</param>
+/// <param name="Especificaciones">Hasta 20 pares nombre/valor, p. ej. "Conexión" / "USB-C".</param>
+public record GuardarProductoRequest(
+    string? Codigo,
+    string? Nombre,
+    decimal Precio,
+    int StockMinimo,
+    bool? Activo,
+    string? Marca = null,
+    string? Categoria = null,
+    string? Descripcion = null,
+    int GarantiaMeses = 0,
+    List<EspecificacionDto>? Especificaciones = null);
 
 /// <param name="Tipo">ENTRADA o SALIDA.</param>
 /// <param name="CostoUnitario">Solo entradas, sin IVA. Si se omite se usa el costo promedio actual.</param>

@@ -37,7 +37,8 @@ public partial class InventarioService
         var q = _db.Productos.AsNoTracking();
         var texto = Contacto.Limpiar(buscar);
         if (texto is not null)
-            q = q.Where(p => p.Codigo.Contains(texto) || p.Nombre.Contains(texto));
+            q = q.Where(p => p.Codigo.Contains(texto) || p.Nombre.Contains(texto)
+                             || (p.Marca != null && p.Marca.Contains(texto)) || (p.Categoria != null && p.Categoria.Contains(texto)));
         if (soloBajoMinimo)
             q = q.Where(p => p.Activo && p.StockMinimo > 0 && p.Stock <= p.StockMinimo);
         var productos = await q.OrderBy(p => p.Nombre).Take(1000).ToListAsync(ct);
@@ -78,6 +79,39 @@ public partial class InventarioService
         p.Precio = r.Precio;
         p.StockMinimo = r.StockMinimo;
         p.Activo = r.Activo ?? p.Activo;
+        p.Marca = Contacto.Opcional(r.Marca, 60, "La marca");
+        p.Categoria = Contacto.Opcional(r.Categoria, 60, "La categoría");
+        p.Descripcion = Contacto.TextoLargo(r.Descripcion, DescripcionMax, "La descripción");
+        if (r.GarantiaMeses < 0 || r.GarantiaMeses > GarantiaMaxMeses)
+            throw new BusinessRuleException($"La garantía debe estar entre 0 y {GarantiaMaxMeses} meses.");
+        p.GarantiaMeses = r.GarantiaMeses;
+        p.Especificaciones = ValidarEspecificaciones(r.Especificaciones);
+    }
+
+    public const int DescripcionMax = 2000;
+    public const int GarantiaMaxMeses = 120;
+    public const int EspecificacionesMax = 20;
+
+    /// <summary>Descarta filas vacías; exige nombre y valor, sin nombres repetidos.</summary>
+    private static List<Especificacion> ValidarEspecificaciones(List<EspecificacionDto>? lista)
+    {
+        var resultado = new List<Especificacion>();
+        foreach (var e in lista ?? new())
+        {
+            var nombre = Contacto.Limpiar(e.Nombre);
+            var valor = Contacto.Limpiar(e.Valor);
+            if (nombre is null && valor is null) continue;
+            if (nombre is null || valor is null)
+                throw new BusinessRuleException("Cada especificación necesita nombre y valor (p. ej. \"Conexión\" y \"USB-C\").");
+            if (nombre.Length > 40 || valor.Length > 120)
+                throw new BusinessRuleException($"La especificación \"{nombre[..Math.Min(nombre.Length, 40)]}\" es demasiado larga (nombre hasta 40 y valor hasta 120 caracteres).");
+            if (resultado.Any(x => x.Nombre.Equals(nombre, StringComparison.OrdinalIgnoreCase)))
+                throw new BusinessRuleException($"La especificación \"{nombre}\" está repetida.");
+            resultado.Add(new Especificacion(nombre, valor));
+        }
+        if (resultado.Count > EspecificacionesMax)
+            throw new BusinessRuleException($"Un producto admite como máximo {EspecificacionesMax} especificaciones.");
+        return resultado;
     }
 
     // ---------- Kardex ----------
@@ -176,6 +210,7 @@ public partial class InventarioService
         }
         return new ProductoInventarioResponse(p.Id, p.Codigo, p.Nombre, p.Precio, p.Stock, p.StockMinimo,
             Math.Round(p.CostoPromedio, 4), Montos.Redondear(p.Stock * p.CostoPromedio), p.Activo,
-            p.Activo && p.StockMinimo > 0 && p.Stock <= p.StockMinimo, margen);
+            p.Activo && p.StockMinimo > 0 && p.Stock <= p.StockMinimo, margen, p.Marca, p.Categoria, p.Descripcion,
+            p.GarantiaMeses, p.Especificaciones.Select(e => new EspecificacionDto(e.Nombre, e.Valor)).ToList());
     }
 }

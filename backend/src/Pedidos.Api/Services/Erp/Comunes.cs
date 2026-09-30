@@ -101,6 +101,23 @@ public static partial class Contacto
         return v;
     }
 
+    /// <summary>
+    /// Texto de varios párrafos: conserva los saltos de línea, quita otros caracteres de control y espacios sobrantes,
+    /// y deja como máximo una línea en blanco seguida. null si queda vacío.
+    /// </summary>
+    public static string? TextoLargo(string? valor, int max, string campo)
+    {
+        var lineas = (valor ?? "").Replace("\r\n", "\n").Replace('\r', '\n').Split('\n')
+            .Select(l => string.Join(' ', new string(l.Where(c => !char.IsControl(c)).ToArray())
+                .Split(' ', StringSplitOptions.RemoveEmptyEntries)))
+            .ToList();
+        var texto = Regex.Replace(string.Join('\n', lineas), @"\n{3,}", "\n\n").Trim();
+        if (texto.Length == 0) return null;
+        if (texto.Length > max)
+            throw new BusinessRuleException($"{campo} admite como máximo {max} caracteres (tiene {texto.Length}).");
+        return texto;
+    }
+
     public static string? Email(string? email)
     {
         var e = Limpiar(email)?.ToLowerInvariant();
