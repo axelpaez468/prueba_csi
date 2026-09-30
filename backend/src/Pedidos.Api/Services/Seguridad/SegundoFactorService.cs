@@ -39,16 +39,24 @@ public class SegundoFactorService
 
     // ---------- SMS ----------
 
-    /// <summary>Genera un código de 6 dígitos, invalida los anteriores del mismo propósito y lo envía.</summary>
-    public async Task EnviarCodigoSmsAsync(Usuario usuario, string telefono, string proposito, CancellationToken ct)
+    /// <summary>
+    /// Genera un código de 6 dígitos, invalida los anteriores del mismo propósito y lo envía.
+    /// Si ya se envió uno hace menos de 30 s: con <paramref name="reusarReciente"/> (reintento de login) no se envía
+    /// otro y sigue valiendo el anterior; sin él (botón "reenviar") se rechaza para evitar abuso de SMS.
+    /// </summary>
+    public async Task EnviarCodigoSmsAsync(Usuario usuario, string telefono, string proposito, CancellationToken ct,
+        bool reusarReciente = false)
     {
         var anterior = await _db.CodigosVerificacion
-            .Where(c => c.UsuarioId == usuario.Id && c.Proposito == proposito && c.UsadoEn == null)
+            .Where(c => c.UsuarioId == usuario.Id && c.Proposito == proposito && c.UsadoEn == null && c.ExpiraEn > Ahora)
             .OrderByDescending(c => c.CreadoEn)
             .FirstOrDefaultAsync(ct);
         if (anterior is not null && Ahora - anterior.CreadoEn < EsperaReenvioSms)
+        {
+            if (reusarReciente) return;
             throw new BusinessRuleException(
                 $"Espera {EsperaReenvioSms.TotalSeconds:0} segundos antes de solicitar otro código.");
+        }
 
         await _db.CodigosVerificacion
             .Where(c => c.UsuarioId == usuario.Id && c.Proposito == proposito && c.UsadoEn == null)

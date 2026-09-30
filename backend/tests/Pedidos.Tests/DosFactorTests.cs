@@ -113,6 +113,22 @@ public class DosFactorTests : IDisposable
     }
 
     [Fact]
+    public async Task Sms_ReintentarElLoginEnMenosDeTreintaSegundos_NoFalla_YSigueValiendoElMismoCodigo()
+    {
+        await ActivarSms(TestDb.VendedorId);
+        var primero = await Login(TestDb.EmailVendedor);
+        var codigo = _s.Correo.UltimoCodigoSms();
+        var smsEnviados = _s.Correo.Enviados.Count;
+
+        var segundo = await Login(TestDb.EmailVendedor); // el usuario volvió atrás y reintentó
+
+        Assert.NotNull(segundo.Desafio);
+        Assert.Equal(smsEnviados, _s.Correo.Enviados.Count); // no se envió otro SMS
+        Assert.NotNull(await Verificar(segundo.Desafio.Desafio, codigo));
+        Assert.NotNull(primero.Desafio);
+    }
+
+    [Fact]
     public async Task Sms_NoSePuedeReenviarAntesDeTreintaSegundos()
     {
         await ActivarSms(TestDb.VendedorId);

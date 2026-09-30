@@ -107,7 +107,8 @@ public class AuthService
             string? destino = null;
             if (usuario.DosFactor == MetodosDosFactor.Sms)
             {
-                await _segundoFactor.EnviarCodigoSmsAsync(usuario, usuario.Telefono!, PropositosCodigo.Login, ct);
+                await _segundoFactor.EnviarCodigoSmsAsync(usuario, usuario.Telefono!, PropositosCodigo.Login, ct,
+                    reusarReciente: true);
                 destino = SegundoFactorService.EnmascararTelefono(usuario.Telefono);
             }
             _bitacora.Registrar(EventosBitacora.SegundoFactorRequerido, true, email, ctx, usuario.Id, usuario.DosFactor);
