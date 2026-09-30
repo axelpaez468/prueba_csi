@@ -135,7 +135,8 @@ for i in $(seq 1 10); do curl -s -o /dev/null -w "%{http_code}\n" -X POST http:/
 | GET/POST | `/api/cuenta/...` | Autenticado | Estado de seguridad, cambio de contraseña, activar/desactivar Google Authenticator, códigos de respaldo, accesos propios |
 | GET | `/api/admin/bitacora` | ADMIN | Últimos 100 eventos de seguridad de todos los usuarios |
 | GET/POST/PUT/DELETE | `/api/admin/usuarios[/{id}]` | ADMIN | Listar (`?buscar=`), crear (envía invitación), editar, `/activar`, `/desactivar`, `/invitacion`, eliminar (solo sin pedidos) · 400 validación · 403 no admin · 404 |
-| GET | `/api/productos` | Autenticado | 200 `[{ id, codigo, nombre, precio, stock }]` (solo productos activos) · 401 |
+| GET | `/api/productos` | Autenticado | 200 `[{ id, codigo, nombre, precio, stock, marca, categoria }]` (solo productos activos) · 401 |
+| GET | `/api/productos/{id}` | Autenticado | Ficha del producto: descripción, garantía y especificaciones técnicas · 404 |
 | POST | `/api/pedidos` | VENDEDOR | 201 `{ numero, fecha, usuarioId, total, lineas[], serie, autorizacion, clienteNit, baseImponible, iva, ... }` · 400 · 401 · 403. Acepta `clienteId` (sin él: CF) y `formaPago` (`EFECTIVO`, `TARJETA`, `TRANSFERENCIA`) |
 | GET | `/api/pedidos?desde=&hasta=` | VENDEDOR (las suyas), ADMIN, CONTADOR | Facturas del rango (por defecto, el mes) |
 | GET | `/api/pedidos/{id}` | Dueño, ADMIN o CONTADOR | 200 · 401 · 404 |
@@ -151,14 +152,15 @@ for i in $(seq 1 10); do curl -s -o /dev/null -w "%{http_code}\n" -X POST http:/
 | GET/POST | `/api/contabilidad/partidas[/{id}]` | CONTADOR, ADMIN | Libro diario (`?desde=&hasta=&origen=`) y partidas manuales · 400 si no cuadran |
 | GET | `/api/contabilidad/reportes/{mayor/{cuentaId} \| balance-comprobacion \| estado-resultados \| balance-general}` | CONTADOR, ADMIN | Libro mayor y estados financieros (`?desde=&hasta=`; balance general `?al=`) |
 | GET | `/api/panel` | ADMIN, BODEGA, COMPRAS, CONTADOR | Indicadores del inicio |
+| GET | `/api/reportes/ventas?desde=&hasta=` | VENDEDOR (las suyas), ADMIN, CONTADOR | Resumen con utilidad, margen y ticket promedio, comparación con el período anterior, y ventas por día, producto, categoría, vendedor, cliente y forma de pago |
 
 Todos los errores tienen el mismo formato: `{ "error": "mensaje legible" }`.
 
 ### Pruebas automatizadas
 
 ```bash
-cd backend && dotnet test      # 132 pruebas (1 se omite si no hay SQL Server; ver abajo)
-cd frontend && flutter test    # 165 pruebas
+cd backend && dotnet test      # 140 pruebas (1 se omite si no hay SQL Server; ver abajo)
+cd frontend && flutter test    # 180 pruebas
 ```
 
 - **Backend:** usa SQLite en memoria, que a diferencia del proveedor InMemory de EF soporta transacciones reales, `ExecuteUpdate` y *check constraints*. Cubre: precio/total calculados en el servidor aunque el cliente los envíe; descuento de stock; rollback completo si una línea falla; última unidad vendida una sola vez; cantidad ≤ 0; producto inexistente; producto duplicado; pedido vacío; pedido ajeno no visible; y login válido/inválido.
@@ -284,6 +286,8 @@ Cada rol ve solo sus módulos (menú **Módulos** en la barra superior). El vend
 |---|---|---|
 | **Ventas** | Venta de contado a un cliente (NIT) o a consumidor final (CF), con **factura simulada** (serie A, número y autorización). | Precios con **IVA 12 % incluido**: el sistema separa la base y el IVA y la suma siempre da el total exacto. Forma de pago: efectivo (Caja) o tarjeta/transferencia (Bancos). |
 | **Clientes y proveedores** | Altas, búsqueda por NIT o nombre, activar o desactivar. | El **NIT se valida con su dígito verificador** (módulo 11; el 10 se escribe K) y es único. "CF" es del sistema. |
+| **Reportes de ventas** | Ventas, facturas, ticket promedio, utilidad bruta y margen, IVA cobrado; variación contra el período anterior; ventas por día; ranking por producto, categoría, vendedor, cliente y forma de pago con su participación. Períodos rápidos: hoy, semana, mes, mes anterior y año. | El vendedor ve solo sus ventas. La utilidad se calcula sin IVA con el costo promedio de cada venta. |
+| **Ficha del producto** | Marca, categoría, descripción detallada (con párrafos), garantía y especificaciones técnicas. En el catálogo, tocar la foto o el nombre abre la ficha; también se filtra por categoría. | Se edita desde Inventario (BODEGA/ADMIN). Hasta 2000 caracteres de descripción y 20 especificaciones sin nombres repetidos. |
 | **Inventario** | Productos, existencias valorizadas, stock mínimo, **kardex** y ajustes (conteo físico, daño, sobrante). | **Costo promedio ponderado**: cada entrada lo recalcula en el mismo `UPDATE` que suma la existencia, así dos operaciones simultáneas no dejan un costo incorrecto. La existencia solo cambia con movimientos: no se edita a mano. |
 | **Compras** | Órdenes de compra a proveedores (costos sin IVA) → **recepción en bodega** con la factura del proveedor → pago de contado desde Bancos. | La recepción es condicional (`WHERE Estado = 'PENDIENTE'`): si dos personas reciben la misma orden a la vez, solo una lo logra y el inventario no se duplica. |
 | **Contabilidad** | Catálogo de cuentas, **libro diario**, partidas manuales, **libro mayor**, balance de comprobación, estado de resultados y balance general. | Cada venta, compra y ajuste genera su **partida automática en la misma transacción**: si algo falla no queda nada a medias. Toda partida debe cuadrar (debe = haber); la BD además impide líneas con debe y haber a la vez. |
