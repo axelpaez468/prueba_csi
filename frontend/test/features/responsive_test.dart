@@ -6,21 +6,28 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:pedidos_app/core/network/api_client.dart';
 import 'package:pedidos_app/core/security/session.dart';
-import 'package:pedidos_app/core/security/token_storage.dart';
 import 'package:pedidos_app/core/theme/app_theme.dart';
 import 'package:pedidos_app/data/models/pedido.dart';
 import 'package:pedidos_app/data/models/producto.dart';
 import 'package:pedidos_app/data/repositories/auth_repository.dart';
+import 'package:pedidos_app/data/repositories/cuenta_repository.dart';
 import 'package:pedidos_app/data/repositories/pedido_repository.dart';
 import 'package:pedidos_app/data/repositories/producto_repository.dart';
 import 'package:pedidos_app/features/auth/login_screen.dart';
+import 'package:pedidos_app/features/auth/recuperar_password_screen.dart';
+import 'package:pedidos_app/features/auth/restablecer_password_screen.dart';
+import 'package:pedidos_app/features/auth/segundo_factor_screen.dart';
 import 'package:pedidos_app/features/auth/session_controller.dart';
 import 'package:pedidos_app/features/cart/cart_controller.dart';
 import 'package:pedidos_app/features/cart/cart_screen.dart';
 import 'package:pedidos_app/features/catalog/catalog_controller.dart';
 import 'package:pedidos_app/features/catalog/catalog_screen.dart';
+import 'package:pedidos_app/features/cuenta/bitacora_screen.dart';
+import 'package:pedidos_app/features/cuenta/seguridad_screen.dart';
 import 'package:pedidos_app/features/order/order_confirmation_screen.dart';
 import 'package:provider/provider.dart';
+
+import '../infra/storage_en_memoria.dart';
 
 /// Renderiza cada pantalla en tamaños de celular, tablet y escritorio.
 /// Cualquier desborde de layout ("RenderFlex overflowed") hace fallar la prueba.
@@ -41,45 +48,65 @@ final _productos = [
   const Producto(id: 5, codigo: 'P-005', nombre: 'Webcam HD', precio: 310, stock: 0),
 ];
 
-class _StorageEnMemoria extends TokenStorage {
-  _StorageEnMemoria(this._session);
-  Session? _session;
+final _accesos = [
+  for (final (evento, exito) in [('LOGIN_EXITOSO', true), ('2FA_FALLIDO', false), ('DISPOSITIVO_NUEVO', true)])
+    {
+      'fecha': '2026-09-29T15:30:00Z',
+      'email': 'usuario-con-correo-bastante-largo@empresa-de-ejemplo.com',
+      'evento': evento,
+      'exito': exito,
+      'ip': '203.0.113.200',
+      'dispositivo': 'Chrome en Windows',
+      'detalle': null,
+    }
+];
 
-  @override
-  Future<Session?> read() async => _session;
-  @override
-  Future<void> save(Session session) async => _session = session;
-  @override
-  Future<void> clear() async => _session = null;
+/// API simulada: responde según la ruta.
+http.Response _responder(http.Request req) {
+  final cuerpo = switch (req.url.path) {
+    '/api/productos' => [
+        for (final p in _productos)
+          {'id': p.id, 'codigo': p.codigo, 'nombre': p.nombre, 'precio': p.precio, 'stock': p.stock},
+      ],
+    '/api/cuenta/seguridad' => {
+        'email': 'usuario-con-correo-bastante-largo@empresa-de-ejemplo.com',
+        'metodo': 'SMS',
+        'telefonoEnmascarado': '+502 •••• 0101',
+        'codigosRespaldoRestantes': 2,
+        'dosFactorObligatorio': true,
+      },
+    '/api/cuenta/accesos' || '/api/admin/bitacora' => _accesos,
+    '/api/auth/login' => {'requiereSegundoFactor': true, 'desafio': 'd', 'metodo': 'SMS', 'destino': '+502 •••• 0101'},
+    _ => <String, dynamic>{},
+  };
+  return http.Response(jsonEncode(cuerpo), 200, headers: {'content-type': 'application/json; charset=utf-8'});
 }
 
 ApiClient _api() => ApiClient(
       baseUrl: 'http://api.test',
       tokenProvider: () async => 'token',
-      httpClient: MockClient((req) async => http.Response(
-            jsonEncode([
-              for (final p in _productos)
-                {'id': p.id, 'codigo': p.codigo, 'nombre': p.nombre, 'precio': p.precio, 'stock': p.stock},
-            ]),
-            200,
-            headers: {'content-type': 'application/json; charset=utf-8'},
-          )),
+      httpClient: MockClient((req) async => _responder(req)),
     );
 
-Future<void> _montar(WidgetTester tester, Size tamano, Widget pantalla, {bool autenticado = true}) async {
+enum _Sesion { anonima, autenticada, segundoFactor }
+
+Future<void> _montar(WidgetTester tester, Size tamano, Widget pantalla, {_Sesion sesion = _Sesion.autenticada}) async {
   tester.view
     ..physicalSize = tamano
     ..devicePixelRatio = 1;
   addTearDown(tester.view.reset);
 
   final api = _api();
+  final auth = AuthRepository(api);
   final session = SessionController(
-    AuthRepository(api),
-    _StorageEnMemoria(autenticado
-        ? Session(token: 't', username: 'vendedor', rol: 'VENDEDOR', expiraEn: DateTime.utc(2100))
+    auth,
+    StorageEnMemoria(sesion == _Sesion.autenticada
+        ? Session(token: 't', username: 'vendedor', email: 'vendedor@pedidos.local', rol: 'ADMIN', expiraEn: DateTime.utc(2100))
         : null),
   );
   await session.restore();
+  if (sesion == _Sesion.segundoFactor) await session.login('admin@pedidos.local', 'x');
+
   final catalogo = CatalogController(ProductoRepository(api));
   final carrito = CartController(PedidoRepository(api))
     ..agregar(_productos[0], 2)
@@ -88,6 +115,8 @@ Future<void> _montar(WidgetTester tester, Size tamano, Widget pantalla, {bool au
 
   await tester.pumpWidget(MultiProvider(
     providers: [
+      Provider.value(value: auth),
+      Provider.value(value: CuentaRepository(api)),
       ChangeNotifierProvider.value(value: session),
       ChangeNotifierProvider.value(value: catalogo),
       ChangeNotifierProvider.value(value: carrito),
@@ -118,8 +147,25 @@ void main() {
   for (final MapEntry(key: nombre, value: tamano) in _tamanos.entries) {
     group(nombre, () {
       testWidgets('login', (tester) async {
-        await _montar(tester, tamano, const LoginScreen(), autenticado: false);
+        await _montar(tester, tamano, const LoginScreen(), sesion: _Sesion.anonima);
         expect(find.text('Iniciar sesión'), findsOneWidget);
+        expect(find.text('¿Olvidaste tu contraseña?'), findsOneWidget);
+      });
+
+      testWidgets('verificación en dos pasos', (tester) async {
+        await _montar(tester, tamano, const SegundoFactorScreen(), sesion: _Sesion.segundoFactor);
+        expect(find.text('Verificación en dos pasos'), findsOneWidget);
+        expect(find.textContaining('+502 •••• 0101'), findsOneWidget);
+      });
+
+      testWidgets('recuperar contraseña', (tester) async {
+        await _montar(tester, tamano, const RecuperarPasswordScreen(), sesion: _Sesion.anonima);
+        expect(find.text('Enviar enlace'), findsOneWidget);
+      });
+
+      testWidgets('restablecer contraseña', (tester) async {
+        await _montar(tester, tamano, RestablecerPasswordScreen(token: 't', alTerminar: () {}), sesion: _Sesion.anonima);
+        expect(find.text('Guardar contraseña'), findsOneWidget);
       });
 
       testWidgets('catálogo', (tester) async {
@@ -135,6 +181,17 @@ void main() {
       testWidgets('confirmación', (tester) async {
         await _montar(tester, tamano, OrderConfirmationScreen(pedido: _pedido));
         expect(find.byKey(const Key('total-pedido')), findsOneWidget);
+      });
+
+      testWidgets('seguridad de la cuenta', (tester) async {
+        await _montar(tester, tamano, const SeguridadScreen());
+        expect(find.text('Verificación en dos pasos'), findsOneWidget);
+        expect(find.text('Cambiar contraseña'), findsOneWidget);
+      });
+
+      testWidgets('bitácora de accesos', (tester) async {
+        await _montar(tester, tamano, const BitacoraScreen());
+        expect(find.text('Bitácora de accesos'), findsOneWidget);
       });
     });
   }
