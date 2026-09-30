@@ -6,6 +6,8 @@ import '../../core/widgets/app_shell.dart';
 import '../auth/session_controller.dart';
 import '../cart/cart_controller.dart';
 import '../cart/cart_screen.dart';
+import '../cuenta/bitacora_screen.dart';
+import '../cuenta/seguridad_screen.dart';
 
 /// Barra superior común: logo, acceso al carrito y menú del usuario.
 class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
@@ -79,7 +81,15 @@ class _MenuUsuario extends StatelessWidget {
       tooltip: 'Cuenta',
       position: PopupMenuPosition.under,
       onSelected: (v) {
-        if (v == 'salir') context.read<SessionController>().logout();
+        final navigator = Navigator.of(context);
+        switch (v) {
+          case 'seguridad':
+            navigator.push(MaterialPageRoute(builder: (_) => const SeguridadScreen()));
+          case 'bitacora':
+            navigator.push(MaterialPageRoute(builder: (_) => const BitacoraScreen()));
+          case 'salir':
+            context.read<SessionController>().logout();
+        }
       },
       itemBuilder: (_) => [
         PopupMenuItem<String>(
@@ -93,6 +103,16 @@ class _MenuUsuario extends StatelessWidget {
             ],
           ),
         ),
+        const PopupMenuDivider(),
+        const PopupMenuItem<String>(
+          value: 'seguridad',
+          child: Row(children: [Icon(Icons.shield_outlined, size: 18), SizedBox(width: 10), Text('Seguridad de la cuenta')]),
+        ),
+        if (session.esAdmin)
+          const PopupMenuItem<String>(
+            value: 'bitacora',
+            child: Row(children: [Icon(Icons.manage_search, size: 18), SizedBox(width: 10), Text('Bitácora de accesos')]),
+          ),
         const PopupMenuDivider(),
         const PopupMenuItem<String>(
           value: 'salir',
