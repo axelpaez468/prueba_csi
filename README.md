@@ -132,6 +132,7 @@ for i in $(seq 1 10); do curl -s -o /dev/null -w "%{http_code}\n" -X POST http:/
 | POST | `/api/auth/restablecer` | Público (con el token del correo) | 200 · 400 enlace vencido o usado, o contraseña que no cumple la política |
 | GET/POST | `/api/cuenta/...` | Autenticado | Estado de seguridad, cambio de contraseña, activar/desactivar 2FA (TOTP o SMS), códigos de respaldo, accesos propios |
 | GET | `/api/admin/bitacora` | ADMIN | Últimos 100 eventos de seguridad de todos los usuarios |
+| GET/POST/PUT/DELETE | `/api/admin/usuarios[/{id}]` | ADMIN | Listar (`?buscar=`), crear (envía invitación), editar, `/activar`, `/desactivar`, `/invitacion`, eliminar (solo sin pedidos) · 400 validación · 403 no admin · 404 |
 | GET | `/api/productos` | Autenticado | 200 `[{ id, codigo, nombre, precio, stock }]` · 401 |
 | POST | `/api/pedidos` | VENDEDOR | 201 `{ numero, fecha, usuarioId, total, lineas[] }` · 400 · 401 · 403 |
 | GET | `/api/pedidos/{id}` | Dueño o ADMIN | 200 · 401 · 404 |
@@ -141,8 +142,8 @@ Todos los errores tienen el mismo formato: `{ "error": "mensaje legible" }`.
 ### Pruebas automatizadas
 
 ```bash
-cd backend && dotnet test      # 48 pruebas (1 se omite si no hay SQL Server; ver abajo)
-cd frontend && flutter test    # 57 pruebas
+cd backend && dotnet test      # 75 pruebas (1 se omite si no hay SQL Server; ver abajo)
+cd frontend && flutter test    # 69 pruebas
 ```
 
 - **Backend:** usa SQLite en memoria, que a diferencia del proveedor InMemory de EF soporta transacciones reales, `ExecuteUpdate` y *check constraints*. Cubre: precio/total calculados en el servidor aunque el cliente los envíe; descuento de stock; rollback completo si una línea falla; última unidad vendida una sola vez; cantidad ≤ 0; producto inexistente; producto duplicado; pedido vacío; pedido ajeno no visible; y login válido/inválido.
@@ -256,6 +257,7 @@ Extensión opcional. Todas las piezas son gratuitas y funcionan con `docker comp
 | **Bitácora de accesos** | Registra logins, fallos, bloqueos, 2FA, recuperaciones y cambios de seguridad, con IP y dispositivo. El usuario ve su actividad y el ADMIN ve la de todos. | Auditoría. |
 | **Secretos cifrados** | El secreto TOTP se guarda con AES-256-GCM. Claves derivadas por HKDF de `SEGURIDAD_CLAVE_MAESTRA`. | Una copia filtrada de la BD no permite generar códigos. |
 | **Aviso de Bloq Mayús y "recordar mi correo"** | Solo en el frontend; nunca se guarda la contraseña. | Comodidad. |
+| **Administración de usuarios (solo ADMIN)** | Nombre, apellido, teléfono (8 dígitos de Guatemala; se guarda como `+502XXXXXXXX`), correo y código corporativo únicos, rol y estado. **El administrador no define contraseñas:** al crear el usuario se envía una invitación de 48 h para que la cree él mismo. Desactivar corta sus sesiones al instante. Un usuario con pedidos no se elimina, se desactiva. El admin no puede desactivarse ni eliminarse a sí mismo y siempre queda al menos un administrador activo. Los administradores nuevos quedan con 2FA por SMS. | Separación de funciones y trazabilidad: cada alta, cambio o baja queda en la bitácora con el administrador que la hizo. |
 
 ---
 
