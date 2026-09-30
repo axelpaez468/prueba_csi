@@ -30,7 +30,7 @@ docker compose up --build
 |---|---|
 | Frontend | http://localhost:8080 |
 | API | http://localhost:5080 |
-| Bandeja de correos y SMS de prueba (Mailpit) | http://localhost:8025 |
+| Bandeja de correos de prueba (Mailpit), si no se configura un SMTP real | http://localhost:8025 |
 
 - El primer build tarda bastante: descarga SQL Server (unos 1.5 GB), el SDK de .NET y Flutter.
 - La base de datos se crea sola. El contenedor `db` arranca SQL Server, ejecuta `db/init/init.sql` y solo entonces el *healthcheck* lo marca como sano. La API espera a ese estado (`depends_on: service_healthy`).
@@ -74,7 +74,7 @@ flutter run -d chrome --web-port 8081 --dart-define=API_URL=http://localhost:508
 | `vendedor@pedidos.local` | `Vendedor123!` | VENDEDOR | No (lo puede activar en "Seguridad de la cuenta") | Ver el catálogo, crear pedidos y ver **sus** pedidos |
 | `admin@pedidos.local` | `AdminPedidos2026!` | ADMIN | **SMS** al `+502 5555 0101` (obligatorio para ADMIN) | Ver cualquier pedido y la bitácora de accesos; no crea pedidos |
 
-**Cómo entrar como admin:** después de la contraseña, el sistema pide un código de 6 dígitos que "llega por SMS". Como es un entorno de prueba, el SMS se simula: ábrelo en **http://localhost:8025** (Mailpit), en el mensaje "📱 SMS a +50255550101". Ahí llegan también los correos de recuperación de contraseña y los avisos de inicio de sesión desde un dispositivo nuevo.
+**Cómo entrar como admin la primera vez:** instala **Google Authenticator** en tu teléfono (gratis en Play Store o App Store). Después de la contraseña, el sistema muestra un **código QR**: escanéalo con la app (o escribe la clave que aparece debajo) y escribe el código de 6 dígitos que muestra la app. Al activarse aparecen **10 códigos de respaldo**: guárdalos, sirven si pierdes el teléfono. Desde entonces, cada inicio de sesión pide el código de la app (salvo que marques "Confiar en este dispositivo por 30 días").
 
 Productos semilla: 5, entre ellos el **Monitor 27" con stock 1**, para probar la concurrencia, y la **Webcam HD con stock 0**, que aparece deshabilitada en el catálogo.
 Son credenciales de prueba y están guardadas como hash BCrypt en `init.sql`. La contraseña del vendedor es anterior a la política nueva: si se cambia, la nueva debe cumplirla.
@@ -92,11 +92,11 @@ Son credenciales de prueba y están guardadas como hash BCrypt en `init.sql`. La
 TOKEN=$(curl -s -X POST http://localhost:5080/api/auth/login -H "Content-Type: application/json" \
   -d '{"email":"vendedor@pedidos.local","password":"Vendedor123!"}' | sed -E 's/.*"token":"([^"]+)".*/\1/')
 
-# Login con 2FA (admin): el paso 1 devuelve un desafío y envía el SMS (ver http://localhost:8025)
+# Login con 2FA (admin): el paso 1 devuelve un desafío (y en el primer ingreso, "uri"/"secreto" para Google Authenticator)
 DESAFIO=$(curl -s -X POST http://localhost:5080/api/auth/login -H "Content-Type: application/json" \
   -d '{"email":"admin@pedidos.local","password":"AdminPedidos2026!"}' | sed -E 's/.*"desafio":"([^"]+)".*/\1/')
 curl -s -X POST http://localhost:5080/api/auth/login/verificar -H "Content-Type: application/json" \
-  -d "{\"desafio\":\"$DESAFIO\",\"codigo\":\"<código del SMS>\"}"
+  -d "{\"desafio\":\"$DESAFIO\",\"codigo\":\"<código de Google Authenticator>\"}"
 
 # Recuperación de contraseña: el enlace llega a la bandeja de Mailpit
 curl -s -X POST http://localhost:5080/api/auth/recuperar -H "Content-Type: application/json" -d '{"email":"vendedor@pedidos.local"}'
@@ -143,7 +143,7 @@ Todos los errores tienen el mismo formato: `{ "error": "mensaje legible" }`.
 
 ```bash
 cd backend && dotnet test      # 75 pruebas (1 se omite si no hay SQL Server; ver abajo)
-cd frontend && flutter test    # 69 pruebas
+cd frontend && flutter test    # 80 pruebas
 ```
 
 - **Backend:** usa SQLite en memoria, que a diferencia del proveedor InMemory de EF soporta transacciones reales, `ExecuteUpdate` y *check constraints*. Cubre: precio/total calculados en el servidor aunque el cliente los envíe; descuento de stock; rollback completo si una línea falla; última unidad vendida una sola vez; cantidad ≤ 0; producto inexistente; producto duplicado; pedido vacío; pedido ajeno no visible; y login válido/inválido.
@@ -244,8 +244,8 @@ Extensión opcional. Todas las piezas son gratuitas y funcionan con `docker comp
 | Función | Cómo funciona | Por qué así |
 |---|---|---|
 | **Inicio de sesión con correo** | El correo se normaliza a minúsculas; mismo mensaje genérico si el correo o la contraseña fallan. | No revela qué cuentas existen. |
-| **2FA con app autenticadora (TOTP, RFC 6238)** | QR generado en el navegador (`qr_flutter`) y verificación con Otp.NET. Tolera ±30 s de desfase de reloj y **rechaza reutilizar** un código ya aceptado. | Estándar abierto y gratuito (Google o Microsoft Authenticator). Más seguro que el SMS. |
-| **2FA por SMS (simulado)** | Código de 6 dígitos que vence en 5 min, máximo 5 intentos, reenvío cada 30 s. Se entrega en Mailpit. | Sin costo para la prueba. Para producción se implementa otro `IEnviadorSms` (por ejemplo Twilio) y se cambia `Sms__Proveedor`. |
+| **2FA con Google Authenticator (TOTP, RFC 6238)** | QR generado en el navegador (`qr_flutter`) y verificación con Otp.NET. Tolera ±30 s de desfase de reloj y **rechaza reutilizar** un código ya aceptado. | Estándar abierto y gratuito, funciona sin conexión y no depende de redes de telefonía (evita el robo de SMS por *SIM swapping*). |
+| **Configuración obligatoria en el primer ingreso** | Un administrador sin la app no puede entrar hasta configurarla: tras la contraseña, el login devuelve el QR (método `CONFIGURAR`) y el primer código de la app activa el 2FA y abre la sesión. | El 2FA obligatorio no depende de que el usuario "se acuerde" de activarlo. |
 | **Códigos de respaldo** | 10 códigos `XXXXX-XXXXX` de un solo uso. Se muestran una vez y se guardan solo como HMAC. | Si el usuario pierde el teléfono no queda fuera de su cuenta. |
 | **Desafío de 2FA** | Tras la contraseña se emite un JWT de 5 minutos con **otra audiencia**, que nunca sirve como sesión. Máximo 5 códigos por desafío, un solo uso, y se invalida si la contraseña cambia. | La contraseña correcta sola no da acceso. |
 | **"Confiar en este dispositivo"** | Token aleatorio de 30 días en `flutter_secure_storage`; en la BD solo su HMAC. Se revoca al cambiar la contraseña. | Menos fricción sin perder control. |
@@ -257,7 +257,7 @@ Extensión opcional. Todas las piezas son gratuitas y funcionan con `docker comp
 | **Bitácora de accesos** | Registra logins, fallos, bloqueos, 2FA, recuperaciones y cambios de seguridad, con IP y dispositivo. El usuario ve su actividad y el ADMIN ve la de todos. | Auditoría. |
 | **Secretos cifrados** | El secreto TOTP se guarda con AES-256-GCM. Claves derivadas por HKDF de `SEGURIDAD_CLAVE_MAESTRA`. | Una copia filtrada de la BD no permite generar códigos. |
 | **Aviso de Bloq Mayús y "recordar mi correo"** | Solo en el frontend; nunca se guarda la contraseña. | Comodidad. |
-| **Administración de usuarios (solo ADMIN)** | Nombre, apellido, teléfono (8 dígitos de Guatemala; se guarda como `+502XXXXXXXX`), correo y código corporativo únicos, rol y estado. **El administrador no define contraseñas:** al crear el usuario se envía una invitación de 48 h para que la cree él mismo. Desactivar corta sus sesiones al instante. Un usuario con pedidos no se elimina, se desactiva. El admin no puede desactivarse ni eliminarse a sí mismo y siempre queda al menos un administrador activo. Los administradores nuevos quedan con 2FA por SMS. | Separación de funciones y trazabilidad: cada alta, cambio o baja queda en la bitácora con el administrador que la hizo. |
+| **Administración de usuarios (solo ADMIN)** | Nombre, apellido, teléfono (8 dígitos de Guatemala; se guarda como `+502XXXXXXXX`), correo y código corporativo únicos, rol y estado. **El administrador no define contraseñas:** al crear el usuario se envía una invitación de 48 h para que la cree él mismo. Desactivar corta sus sesiones al instante. Un usuario con pedidos no se elimina, se desactiva. El admin no puede desactivarse ni eliminarse a sí mismo y siempre queda al menos un administrador activo. Los administradores nuevos (o promovidos) configuran Google Authenticator en su primer ingreso. | Separación de funciones y trazabilidad: cada alta, cambio o baja queda en la bitácora con el administrador que la hizo. |
 
 ---
 
