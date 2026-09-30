@@ -7,8 +7,16 @@ namespace Pedidos.Api.Services.Seguridad;
 public record ContextoCliente(string? Ip, string? UserAgent)
 {
     public static ContextoCliente Desde(HttpContext http) => new(
-        http.Connection.RemoteIpAddress?.ToString(),
+        IpDe(http),
         Limpiar(http.Request.Headers.UserAgent.ToString(), 300));
+
+    /// <summary>IP del cliente; una IPv4 escrita como IPv6 (::ffff:1.2.3.4) se normaliza a 1.2.3.4.</summary>
+    public static string? IpDe(HttpContext http)
+    {
+        var ip = http.Connection.RemoteIpAddress;
+        if (ip is { IsIPv4MappedToIPv6: true }) ip = ip.MapToIPv4();
+        return ip?.ToString();
+    }
 
     /// <summary>Recorta y quita caracteres de control (evita inyectar líneas falsas en logs/reportes).</summary>
     public static string? Limpiar(string? valor, int largo)

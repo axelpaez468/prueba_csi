@@ -63,5 +63,6 @@ public static class RateLimitPolicies
 
     // Si la API se publica detrás de un proxy, se debe configurar ForwardedHeaders con la IP del proxy
     // como confiable; de lo contrario todas las peticiones compartirían la IP del proxy.
-    private static string ClienteIp(HttpContext http) => http.Connection.RemoteIpAddress?.ToString() ?? "desconocida";
+    private static string ClienteIp(HttpContext http) =>
+        Pedidos.Api.Services.Seguridad.ContextoCliente.IpDe(http) ?? "desconocida";
 }
