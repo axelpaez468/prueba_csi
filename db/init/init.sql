@@ -225,7 +225,7 @@ IF OBJECT_ID(N'dbo.CodigosVerificacion', N'U') IS NOT NULL
 GO
 -- ---------- Datos semilla ----------
 -- Hashes BCrypt (work factor 11). Contraseñas de prueba documentadas en el README.
--- El admin configura Google Authenticator en su primer inicio de sesión (el 2FA es obligatorio para su rol).
+-- Cada usuario configura Google Authenticator en su primer inicio de sesión (el 2FA es obligatorio para todos).
 IF NOT EXISTS (SELECT 1 FROM dbo.Usuarios)
 INSERT INTO dbo.Usuarios (Username, Nombre, Apellido, CodigoCorporativo, Email, PasswordHash, Rol, DosFactor, Telefono) VALUES
     (N'Vendedor Demo', N'Vendedor', N'Demo', N'VEN-0001', N'vendedor@pedidos.local',

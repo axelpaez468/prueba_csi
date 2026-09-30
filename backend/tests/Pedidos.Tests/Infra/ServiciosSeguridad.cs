@@ -3,7 +3,10 @@ using System.Text.RegularExpressions;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
+using OtpNet;
 using Pedidos.Api.Data;
+using Pedidos.Api.Domain;
+using Pedidos.Api.Dtos;
 using Pedidos.Api.Notificaciones;
 using Pedidos.Api.Security;
 using Pedidos.Api.Services;
@@ -73,6 +76,21 @@ public sealed class ServiciosSeguridad
 
     public Pedidos.Api.Services.Usuarios.UsuarioService Usuarios(AppDbContext db) =>
         new(db, Recuperacion(db), new BitacoraService(db, Reloj), Reloj);
+
+    /// <summary>
+    /// Login completo como lo haría el usuario: si es su primer ingreso, configura Google Authenticator con el
+    /// secreto del QR. Devuelve null si la contraseña no es válida o si el login pide el código de una app ya configurada.
+    /// </summary>
+    public async Task<LoginResponse?> EntrarAsync(TestDb testDb, string email, string password,
+        string? tokenDispositivo = null, bool confiar = false)
+    {
+        var paso1 = await Auth(testDb.CrearContexto()).LoginAsync(email, password, tokenDispositivo, Contexto, default);
+        if (paso1.Sesion is not null || paso1.Desafio?.Metodo != MetodosDosFactor.Configurar) return paso1.Sesion;
+
+        var codigo = new Totp(Base32Encoding.ToBytes(paso1.Desafio.Secreto)).ComputeTotp();
+        return await Auth(testDb.CrearContexto())
+            .VerificarSegundoFactorAsync(paso1.Desafio.Desafio, codigo, confiar, Contexto, default);
+    }
 
     public RecuperacionService Recuperacion(AppDbContext db) =>
         new(db, Cifrador, new PoliticaPassword(Filtradas), new BitacoraService(db, Reloj), Correo,

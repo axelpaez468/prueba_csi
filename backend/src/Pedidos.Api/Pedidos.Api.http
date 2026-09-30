@@ -2,16 +2,24 @@
 # Local con dotnet run: http://localhost:5080  |  Docker: el puerto publicado en docker-compose.
 @baseUrl = http://localhost:5080
 
-### 1. Login como vendedor
+### 1. Login como vendedor (paso 1): el 2FA con Google Authenticator es obligatorio -> { requiereSegundoFactor, desafio, metodo }
+# Si metodo = "CONFIGURAR" (primer ingreso), la respuesta trae "uri" y "secreto": agrégalos a Google Authenticator.
+# Luego copia en @codigoVendedor el código de 6 dígitos que muestra la app.
 # @name loginVendedor
 POST {{baseUrl}}/api/auth/login
 Content-Type: application/json
 
 { "email": "vendedor@pedidos.local", "password": "Vendedor123!" }
 
-### 2. Login como admin (paso 1): 2FA con Google Authenticator -> { requiereSegundoFactor, desafio, metodo }
-# Si metodo = "CONFIGURAR" (primer ingreso), la respuesta trae "uri" y "secreto": agrégalos a Google Authenticator.
-# Luego copia en @codigoApp el código de 6 dígitos que muestra la app.
+### 1b. Login como vendedor (paso 2): código de Google Authenticator -> token
+@codigoVendedor = 000000
+# @name verificarVendedor
+POST {{baseUrl}}/api/auth/login/verificar
+Content-Type: application/json
+
+{ "desafio": "{{loginVendedor.response.body.desafio}}", "codigo": "{{codigoVendedor}}", "confiarDispositivo": false }
+
+### 2. Login como admin (paso 1): igual que el vendedor
 # @name loginAdmin
 POST {{baseUrl}}/api/auth/login
 Content-Type: application/json
@@ -34,7 +42,7 @@ Content-Type: application/json
 
 ### 2d. Seguridad de la cuenta del vendedor
 GET {{baseUrl}}/api/cuenta/seguridad
-Authorization: Bearer {{loginVendedor.response.body.token}}
+Authorization: Bearer {{verificarVendedor.response.body.token}}
 
 ### 2e. Bitácora de accesos (solo ADMIN)
 GET {{baseUrl}}/api/admin/bitacora
@@ -48,7 +56,7 @@ Content-Type: application/json
 
 ### 4. Catálogo (requiere token)
 GET {{baseUrl}}/api/productos
-Authorization: Bearer {{loginVendedor.response.body.token}}
+Authorization: Bearer {{verificarVendedor.response.body.token}}
 
 ### 5. Catálogo sin token -> 401
 GET {{baseUrl}}/api/productos
@@ -57,7 +65,7 @@ GET {{baseUrl}}/api/productos
 # @name crearPedido
 POST {{baseUrl}}/api/pedidos
 Content-Type: application/json
-Authorization: Bearer {{loginVendedor.response.body.token}}
+Authorization: Bearer {{verificarVendedor.response.body.token}}
 
 {
   "lineas": [
@@ -69,7 +77,7 @@ Authorization: Bearer {{loginVendedor.response.body.token}}
 
 ### 7. Consultar el pedido recién creado (dueño)
 GET {{baseUrl}}/api/pedidos/{{crearPedido.response.body.numero}}
-Authorization: Bearer {{loginVendedor.response.body.token}}
+Authorization: Bearer {{verificarVendedor.response.body.token}}
 
 ### 8. Consultar el mismo pedido como ADMIN
 GET {{baseUrl}}/api/pedidos/{{crearPedido.response.body.numero}}
@@ -85,31 +93,31 @@ Authorization: Bearer {{verificarAdmin.response.body.token}}
 ### 10. Cantidad inválida -> 400
 POST {{baseUrl}}/api/pedidos
 Content-Type: application/json
-Authorization: Bearer {{loginVendedor.response.body.token}}
+Authorization: Bearer {{verificarVendedor.response.body.token}}
 
 { "lineas": [ { "productoId": 1, "cantidad": 0 } ] }
 
 ### 11. Producto duplicado -> 400
 POST {{baseUrl}}/api/pedidos
 Content-Type: application/json
-Authorization: Bearer {{loginVendedor.response.body.token}}
+Authorization: Bearer {{verificarVendedor.response.body.token}}
 
 { "lineas": [ { "productoId": 1, "cantidad": 1 }, { "productoId": 1, "cantidad": 2 } ] }
 
 ### 12. Producto inexistente -> 400
 POST {{baseUrl}}/api/pedidos
 Content-Type: application/json
-Authorization: Bearer {{loginVendedor.response.body.token}}
+Authorization: Bearer {{verificarVendedor.response.body.token}}
 
 { "lineas": [ { "productoId": 9999, "cantidad": 1 } ] }
 
 ### 13. Stock insuficiente (Monitor tiene stock 1) -> 400
 POST {{baseUrl}}/api/pedidos
 Content-Type: application/json
-Authorization: Bearer {{loginVendedor.response.body.token}}
+Authorization: Bearer {{verificarVendedor.response.body.token}}
 
 { "lineas": [ { "productoId": 3, "cantidad": 5 } ] }
 
 ### 14. Pedido inexistente o ajeno -> 404
 GET {{baseUrl}}/api/pedidos/999999
-Authorization: Bearer {{loginVendedor.response.body.token}}
+Authorization: Bearer {{verificarVendedor.response.body.token}}

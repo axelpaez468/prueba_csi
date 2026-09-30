@@ -75,15 +75,17 @@ public class DosFactorTests : IDisposable
 
         await Assert.ThrowsAsync<BusinessRuleException>(() =>
             _s.Cuenta(_testDb.CrearContexto()).ConfirmarTotpAsync(TestDb.VendedorId, "000000", _s.Contexto, default));
-        Assert.NotNull((await Login(TestDb.EmailVendedor)).Sesion); // sigue sin 2FA
+        Assert.Equal(MetodosDosFactor.Configurar, (await Login(TestDb.EmailVendedor)).Desafio!.Metodo); // sigue sin 2FA
     }
 
-    // ---------- Configuración obligatoria (administradores) ----------
+    // ---------- Configuración obligatoria (todos los usuarios) ----------
 
-    [Fact]
-    public async Task Admin_SinAppConfigurada_ElLoginLeExigeConfigurarla_ConElQR()
+    [Theory]
+    [InlineData(TestDb.EmailAdmin)]
+    [InlineData(TestDb.EmailVendedor)]
+    public async Task SinAppConfigurada_ElLoginExigeConfigurarla_ConElQR(string email)
     {
-        var paso1 = await Login(TestDb.EmailAdmin);
+        var paso1 = await Login(email);
 
         Assert.Null(paso1.Sesion);
         Assert.Equal(MetodosDosFactor.Configurar, paso1.Desafio!.Metodo);
@@ -117,12 +119,6 @@ public class DosFactorTests : IDisposable
 
         await using var db = _testDb.CrearContexto();
         Assert.Equal(MetodosDosFactor.Ninguno, db.Usuarios.Single(u => u.Id == TestDb.AdminId).DosFactor);
-    }
-
-    [Fact]
-    public async Task Vendedor_SinApp_EntraDirecto_PorqueParaElEsOpcional()
-    {
-        Assert.NotNull((await Login(TestDb.EmailVendedor)).Sesion);
     }
 
     // ---------- Códigos de respaldo y dispositivo de confianza ----------
@@ -174,26 +170,14 @@ public class DosFactorTests : IDisposable
         await Assert.ThrowsAsync<BusinessRuleException>(() => Verificar("eyJhbGciOiJub25lIn0.e30.", "123456"));
     }
 
-    [Fact]
-    public async Task Admin_NoPuedeDesactivarEl2FA()
+    [Theory]
+    [InlineData(TestDb.AdminId)]
+    [InlineData(TestDb.VendedorId)]
+    public async Task NingunUsuario_PuedeDesactivarEl2FA(int usuarioId)
     {
-        await ActivarTotp(TestDb.AdminId);
+        await ActivarTotp(usuarioId);
 
         await Assert.ThrowsAsync<BusinessRuleException>(() =>
-            _s.Cuenta(_testDb.CrearContexto()).DesactivarAsync(TestDb.AdminId, TestDb.PasswordDePrueba, _s.Contexto, default));
-    }
-
-    [Fact]
-    public async Task Vendedor_PuedeDesactivarEl2FA_ConSuContrasena()
-    {
-        await ActivarTotp(TestDb.VendedorId);
-
-        await Assert.ThrowsAsync<BusinessRuleException>(() =>
-            _s.Cuenta(_testDb.CrearContexto()).DesactivarAsync(TestDb.VendedorId, "incorrecta", _s.Contexto, default));
-        await _s.Cuenta(_testDb.CrearContexto()).DesactivarAsync(TestDb.VendedorId, TestDb.PasswordDePrueba, _s.Contexto, default);
-
-        Assert.NotNull((await Login(TestDb.EmailVendedor)).Sesion);
-        await using var db = _testDb.CrearContexto();
-        Assert.Equal(0, await db.CodigosRespaldo.CountAsync(c => c.UsuarioId == TestDb.VendedorId));
+            _s.Cuenta(_testDb.CrearContexto()).DesactivarAsync(usuarioId, TestDb.PasswordDePrueba, _s.Contexto, default));
     }
 }

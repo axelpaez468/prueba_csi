@@ -35,8 +35,7 @@ public class RecuperacionTests : IDisposable
 
         await Restablecer(token, NuevaPassword);
 
-        var login = await _s.Auth(_testDb.CrearContexto()).LoginAsync(TestDb.EmailVendedor, NuevaPassword, null, _s.Contexto, default);
-        Assert.NotNull(login.Sesion);
+        Assert.NotNull(await _s.EntrarAsync(_testDb, TestDb.EmailVendedor, NuevaPassword));
         Assert.Contains(_s.Correo.Enviados, m => m.Asunto == "Tu contraseña fue cambiada");
         await Assert.ThrowsAsync<BusinessRuleException>(() => Restablecer(token, "Tercera-Clave-Segura-2026"));
     }

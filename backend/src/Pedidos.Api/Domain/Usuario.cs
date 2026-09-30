@@ -42,9 +42,9 @@ public class Usuario
     public string? TotpPendienteCifrado { get; set; }
 
     /// <summary>
-    /// Los administradores no pueden operar sin segundo factor: si no lo tienen, el login los obliga a configurarlo.
+    /// Ningún usuario (administrador o vendedor) opera sin segundo factor: si no lo tiene, el login lo obliga a configurarlo.
     /// </summary>
-    public bool DosFactorObligatorio => Rol == Roles.Admin;
+    public bool DosFactorObligatorio => Rol is Roles.Admin or Roles.Vendedor;
 
     /// <summary>
     /// Se incrementa al cambiar la contraseña o el 2FA. Viaja en el JWT: los tokens emitidos antes

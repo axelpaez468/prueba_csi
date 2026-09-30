@@ -108,7 +108,7 @@ public class CuentaService
     {
         var u = await CargarAsync(usuarioId, ct);
         if (u.DosFactorObligatorio)
-            throw new BusinessRuleException("La verificación en dos pasos es obligatoria para administradores.");
+            throw new BusinessRuleException("La verificación en dos pasos es obligatoria para todos los usuarios.");
         ExigirPassword(u, password);
 
         u.DosFactor = MetodosDosFactor.Ninguno;

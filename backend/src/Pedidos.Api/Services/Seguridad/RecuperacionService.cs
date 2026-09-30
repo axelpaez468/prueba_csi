@@ -80,7 +80,7 @@ public class RecuperacionService
             $"  Correo de acceso: {usuario.Email}\n  Código corporativo: {usuario.CodigoCorporativo}\n  Rol: {usuario.Rol}\n\n" +
             $"Para activarla, crea tu contraseña con este enlace (vence en {VigenciaInvitacion.TotalHours:0} horas y funciona una sola vez):\n\n{enlace}\n\n" +
             (usuario.DosFactorObligatorio
-                ? "Por tu rol, en tu primer inicio de sesión configurarás la verificación en dos pasos con Google Authenticator " +
+                ? "En tu primer inicio de sesión configurarás la verificación en dos pasos con Google Authenticator " +
                   "(descárgala gratis en tu teléfono).\n"
                 : "") +
             "Si no esperabas este correo, ignóralo.");

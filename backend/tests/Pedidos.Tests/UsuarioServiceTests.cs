@@ -51,16 +51,17 @@ public class UsuarioServiceTests : IDisposable
         await _s.Recuperacion(_testDb.CrearContexto()).RestablecerAsync(
             _s.Correo.UltimoTokenInvitacion("ana.lopez@empresa.gt"), "Mi-Clave-Nueva-2026", _s.Contexto, default);
 
-        var despues = await _s.Auth(_testDb.CrearContexto())
-            .LoginAsync("ana.lopez@empresa.gt", "Mi-Clave-Nueva-2026", null, _s.Contexto, default);
-        Assert.NotNull(despues.Sesion);
-        Assert.Equal("Ana María López", despues.Sesion.Username);
+        var despues = await _s.EntrarAsync(_testDb, "ana.lopez@empresa.gt", "Mi-Clave-Nueva-2026");
+        Assert.NotNull(despues);
+        Assert.Equal("Ana María López", despues.Username);
     }
 
-    [Fact]
-    public async Task Crear_Administrador_DebeConfigurarGoogleAuthenticatorEnSuPrimerIngreso()
+    [Theory]
+    [InlineData("ADMIN")]
+    [InlineData("VENDEDOR")]
+    public async Task Crear_CualquierRol_DebeConfigurarGoogleAuthenticatorEnSuPrimerIngreso(string rol)
     {
-        await Crear(Nuevo(rol: "ADMIN"));
+        await Crear(Nuevo(rol: rol));
         await _s.Recuperacion(_testDb.CrearContexto()).RestablecerAsync(
             _s.Correo.UltimoTokenInvitacion("ana.lopez@empresa.gt"), "Mi-Clave-Nueva-2026", _s.Contexto, default);
 
@@ -154,8 +155,7 @@ public class UsuarioServiceTests : IDisposable
             Assert.Equal(1, db.Usuarios.Single(x => x.Id == TestDb.VendedorId).VersionSesion); // sesiones cerradas
 
         await Servicio().CambiarEstadoAsync(TestDb.VendedorId, true, TestDb.AdminId, _s.Contexto, default);
-        Assert.NotNull((await _s.Auth(_testDb.CrearContexto())
-            .LoginAsync(TestDb.EmailVendedor, TestDb.PasswordDePrueba, null, _s.Contexto, default)).Sesion);
+        Assert.NotNull(await _s.EntrarAsync(_testDb, TestDb.EmailVendedor, TestDb.PasswordDePrueba));
     }
 
     [Fact]

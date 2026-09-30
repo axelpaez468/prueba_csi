@@ -102,7 +102,7 @@ public class AuthService
             return new LoginResultado(null, null, null, Desactivada: true);
         }
 
-        // 2FA obligatorio (administradores) y todavía sin configurar: debe configurar la app ahora para poder entrar.
+        // 2FA obligatorio (todos los roles) y todavía sin configurar: debe configurar la app ahora para poder entrar.
         if (usuario.DosFactor == MetodosDosFactor.Ninguno && usuario.DosFactorObligatorio)
         {
             var (secreto, uri) = _segundoFactor.PrepararTotp(usuario);

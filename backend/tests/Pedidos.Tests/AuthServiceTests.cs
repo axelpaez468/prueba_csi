@@ -17,10 +17,10 @@ public class AuthServiceTests : IDisposable
     [Fact]
     public async Task Login_ConCorreoYContrasenaValidos_DevuelveTokenConRolCorreoYVersionDeSesion()
     {
-        var resultado = await Login(TestDb.EmailVendedor, TestDb.PasswordDePrueba);
+        var sesion = await _s.EntrarAsync(_testDb, TestDb.EmailVendedor, TestDb.PasswordDePrueba);
 
-        Assert.NotNull(resultado.Sesion);
-        var token = new JwtSecurityTokenHandler().ReadJwtToken(resultado.Sesion.Token);
+        Assert.NotNull(sesion);
+        var token = new JwtSecurityTokenHandler().ReadJwtToken(sesion.Token);
         Assert.Equal("VENDEDOR", token.Claims.Single(c => c.Type == JwtClaims.Role).Value);
         Assert.Equal(TestDb.EmailVendedor, token.Claims.Single(c => c.Type == JwtClaims.Email).Value);
         Assert.Equal("0", token.Claims.Single(c => c.Type == JwtClaims.VersionSesion).Value);
@@ -30,7 +30,7 @@ public class AuthServiceTests : IDisposable
     [Fact]
     public async Task Login_IgnoraMayusculasYEspaciosEnElCorreo()
     {
-        Assert.NotNull((await Login("  VENDEDOR@Pedidos.TEST ", TestDb.PasswordDePrueba)).Sesion);
+        Assert.NotNull(await _s.EntrarAsync(_testDb, "  VENDEDOR@Pedidos.TEST ", TestDb.PasswordDePrueba));
     }
 
     [Theory]
@@ -73,14 +73,15 @@ public class AuthServiceTests : IDisposable
 
         // Pasado el bloqueo vuelve a funcionar.
         _s.Reloj.Advance(LoginThrottle.DuracionBloqueo + TimeSpan.FromSeconds(1));
-        Assert.NotNull((await Login(TestDb.EmailVendedor, TestDb.PasswordDePrueba)).Sesion);
+        Assert.NotNull(await _s.EntrarAsync(_testDb, TestDb.EmailVendedor, TestDb.PasswordDePrueba));
     }
 
     [Fact]
     public async Task Login_DesdeDispositivoNuevo_AvisaPorCorreoSoloLaPrimeraVez()
     {
-        await Login(TestDb.EmailVendedor, TestDb.PasswordDePrueba);
-        await Login(TestDb.EmailVendedor, TestDb.PasswordDePrueba);
+        // El segundo ingreso usa el dispositivo de confianza para no pedir otra vez el código de la app.
+        var primera = await _s.EntrarAsync(_testDb, TestDb.EmailVendedor, TestDb.PasswordDePrueba, confiar: true);
+        Assert.NotNull(await _s.EntrarAsync(_testDb, TestDb.EmailVendedor, TestDb.PasswordDePrueba, primera!.TokenDispositivo));
 
         var avisos = _s.Correo.Enviados.Where(m => m.Para == TestDb.EmailVendedor && m.Asunto.Contains("Nuevo inicio")).ToList();
         Assert.Single(avisos);
