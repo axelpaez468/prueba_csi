@@ -199,7 +199,7 @@ public class UsuarioServiceTests : IDisposable
     {
         await using (var db = _testDb.CrearContexto())
         {
-            db.Pedidos.Add(new Pedido { UsuarioId = TestDb.VendedorId, Fecha = DateTime.UtcNow, Total = 1 });
+            db.Pedidos.Add(new Pedido { UsuarioId = TestDb.VendedorId, ClienteId = TestDb.ConsumidorFinalId, Fecha = DateTime.UtcNow, Total = 1 });
             await db.SaveChangesAsync();
         }
 
