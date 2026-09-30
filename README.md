@@ -71,10 +71,10 @@ flutter run -d chrome --web-port 8081 --dart-define=API_URL=http://localhost:508
 
 | Correo | Contraseña | Rol | 2FA | Puede |
 |---|---|---|---|---|
-| `vendedor@pedidos.local` | `Vendedor123!` | VENDEDOR | No (lo puede activar en "Seguridad de la cuenta") | Ver el catálogo, crear pedidos y ver **sus** pedidos |
-| `admin@pedidos.local` | `AdminPedidos2026!` | ADMIN | **Google Authenticator** (obligatorio para ADMIN; se configura con un QR en el primer ingreso) | Ver cualquier pedido, administrar usuarios y ver la bitácora; no crea pedidos |
+| `vendedor@pedidos.local` | `Vendedor123!` | VENDEDOR | **Google Authenticator** (obligatorio; se configura con un QR en el primer ingreso) | Ver el catálogo, crear pedidos y ver **sus** pedidos |
+| `admin@pedidos.local` | `AdminPedidos2026!` | ADMIN | **Google Authenticator** (obligatorio; se configura con un QR en el primer ingreso) | Ver cualquier pedido, administrar usuarios y ver la bitácora; no crea pedidos |
 
-**Cómo entrar como admin la primera vez:** instala **Google Authenticator** en tu teléfono (gratis en Play Store o App Store). Después de la contraseña, el sistema muestra un **código QR**: escanéalo con la app (o escribe la clave que aparece debajo) y escribe el código de 6 dígitos que muestra la app. Al activarse aparecen **10 códigos de respaldo**: guárdalos, sirven si pierdes el teléfono. Desde entonces, cada inicio de sesión pide el código de la app (salvo que marques "Confiar en este dispositivo por 30 días").
+**Cómo entrar la primera vez (vendedor o admin):** instala **Google Authenticator** en tu teléfono (gratis en Play Store o App Store). Después de la contraseña, el sistema muestra un **código QR**: escanéalo con la app (o escribe la clave que aparece debajo) y escribe el código de 6 dígitos que muestra la app. Al activarse aparecen **10 códigos de respaldo**: guárdalos, sirven si pierdes el teléfono. Desde entonces, cada inicio de sesión pide el código de la app (salvo que marques "Confiar en este dispositivo por 30 días").
 
 Productos semilla: 5, entre ellos el **Monitor 27" con stock 1**, para probar la concurrencia, y la **Webcam HD con stock 0**, que aparece deshabilitada en el catálogo.
 Son credenciales de prueba y están guardadas como hash BCrypt en `init.sql`. La contraseña del vendedor es anterior a la política nueva: si se cambia, la nueva debe cumplirla.
@@ -88,15 +88,13 @@ Son credenciales de prueba y están guardadas como hash BCrypt en `init.sql`. La
 - **curl** (Git Bash, Linux o macOS):
 
 ```bash
-# Login (guarda el token)
-TOKEN=$(curl -s -X POST http://localhost:5080/api/auth/login -H "Content-Type: application/json" \
-  -d '{"email":"vendedor@pedidos.local","password":"Vendedor123!"}' | sed -E 's/.*"token":"([^"]+)".*/\1/')
-
-# Login con 2FA (admin): el paso 1 devuelve un desafío (y en el primer ingreso, "uri"/"secreto" para Google Authenticator)
+# Login en dos pasos (2FA obligatorio). Paso 1: correo y contraseña devuelven un desafío
+# (en el primer ingreso también "uri"/"secreto" para registrar la cuenta en Google Authenticator).
 DESAFIO=$(curl -s -X POST http://localhost:5080/api/auth/login -H "Content-Type: application/json" \
-  -d '{"email":"admin@pedidos.local","password":"AdminPedidos2026!"}' | sed -E 's/.*"desafio":"([^"]+)".*/\1/')
-curl -s -X POST http://localhost:5080/api/auth/login/verificar -H "Content-Type: application/json" \
-  -d "{\"desafio\":\"$DESAFIO\",\"codigo\":\"<código de Google Authenticator>\"}"
+  -d '{"email":"vendedor@pedidos.local","password":"Vendedor123!"}' | sed -E 's/.*"desafio":"([^"]+)".*/\1/')
+# Paso 2: el código de 6 dígitos de la app devuelve el token.
+TOKEN=$(curl -s -X POST http://localhost:5080/api/auth/login/verificar -H "Content-Type: application/json" \
+  -d "{\"desafio\":\"$DESAFIO\",\"codigo\":\"<código de Google Authenticator>\"}" | sed -E 's/.*"token":"([^"]+)".*/\1/')
 
 # Recuperación de contraseña: el enlace llega a la bandeja de Mailpit
 curl -s -X POST http://localhost:5080/api/auth/recuperar -H "Content-Type: application/json" -d '{"email":"vendedor@pedidos.local"}'
@@ -245,11 +243,11 @@ Extensión opcional. Todas las piezas son gratuitas y funcionan con `docker comp
 |---|---|---|
 | **Inicio de sesión con correo** | El correo se normaliza a minúsculas; mismo mensaje genérico si el correo o la contraseña fallan. | No revela qué cuentas existen. |
 | **2FA con Google Authenticator (TOTP, RFC 6238)** | QR generado en el navegador (`qr_flutter`) y verificación con Otp.NET. Tolera ±30 s de desfase de reloj y **rechaza reutilizar** un código ya aceptado. | Estándar abierto y gratuito, funciona sin conexión y no depende de redes de telefonía (evita el robo de SMS por *SIM swapping*). |
-| **Configuración obligatoria en el primer ingreso** | Un administrador sin la app no puede entrar hasta configurarla: tras la contraseña, el login devuelve el QR (método `CONFIGURAR`) y el primer código de la app activa el 2FA y abre la sesión. | El 2FA obligatorio no depende de que el usuario "se acuerde" de activarlo. |
+| **Configuración obligatoria en el primer ingreso** | Ningún usuario (vendedor o administrador) puede entrar sin la app hasta configurarla: tras la contraseña, el login devuelve el QR (método `CONFIGURAR`) y el primer código de la app activa el 2FA y abre la sesión. | El 2FA obligatorio no depende de que el usuario "se acuerde" de activarlo. |
 | **Códigos de respaldo** | 10 códigos `XXXXX-XXXXX` de un solo uso. Se muestran una vez y se guardan solo como HMAC. | Si el usuario pierde el teléfono no queda fuera de su cuenta. |
 | **Desafío de 2FA** | Tras la contraseña se emite un JWT de 5 minutos con **otra audiencia**, que nunca sirve como sesión. Máximo 5 códigos por desafío, un solo uso, y se invalida si la contraseña cambia. | La contraseña correcta sola no da acceso. |
 | **"Confiar en este dispositivo"** | Token aleatorio de 30 días en `flutter_secure_storage`; en la BD solo su HMAC. Se revoca al cambiar la contraseña. | Menos fricción sin perder control. |
-| **2FA obligatorio para ADMIN** | Un administrador no puede desactivarlo. | Los roles críticos siempre quedan protegidos. |
+| **2FA obligatorio para todos** | Nadie puede desactivarlo; solo reconfigurarlo en otro teléfono. | Todas las cuentas quedan protegidas aunque se filtre una contraseña. |
 | **Recuperación de contraseña** | Enlace de un solo uso que vence en 30 min. Pedir uno nuevo invalida el anterior. La respuesta es idéntica exista o no el correo, y el envío va por una cola en segundo plano, así que el tiempo tampoco lo delata. | Buenas prácticas de OWASP para restablecer contraseñas. |
 | **Cierre de sesiones al cambiar la contraseña** | El JWT lleva una "versión de sesión"; al restablecer o cambiar la contraseña (o desactivar el 2FA) sube la versión y los tokens anteriores dejan de valer. | Si la contraseña se filtró, el atacante pierde el acceso de inmediato. |
 | **Política de contraseñas** | Mínimo 12 caracteres, que no contenga el correo ni sea repetitiva, y **que no esté filtrada**: consulta gratuita a *Pwned Passwords* con k-anonimato (solo se envían 5 caracteres del SHA-1). Si el servicio no responde, se permite continuar. | Lo que recomienda hoy el NIST (SP 800-63B), en lugar de reglas de composición. |
@@ -257,7 +255,7 @@ Extensión opcional. Todas las piezas son gratuitas y funcionan con `docker comp
 | **Bitácora de accesos** | Registra logins, fallos, bloqueos, 2FA, recuperaciones y cambios de seguridad, con IP y dispositivo. El usuario ve su actividad y el ADMIN ve la de todos. | Auditoría. |
 | **Secretos cifrados** | El secreto TOTP se guarda con AES-256-GCM. Claves derivadas por HKDF de `SEGURIDAD_CLAVE_MAESTRA`. | Una copia filtrada de la BD no permite generar códigos. |
 | **Aviso de Bloq Mayús y "recordar mi correo"** | Solo en el frontend; nunca se guarda la contraseña. | Comodidad. |
-| **Administración de usuarios (solo ADMIN)** | Nombre, apellido, teléfono (8 dígitos de Guatemala; se guarda como `+502XXXXXXXX`), correo y código corporativo únicos, rol y estado. **El administrador no define contraseñas:** al crear el usuario se envía una invitación de 48 h para que la cree él mismo. Desactivar corta sus sesiones al instante. Un usuario con pedidos no se elimina, se desactiva. El admin no puede desactivarse ni eliminarse a sí mismo y siempre queda al menos un administrador activo. Los administradores nuevos (o promovidos) configuran Google Authenticator en su primer ingreso. | Separación de funciones y trazabilidad: cada alta, cambio o baja queda en la bitácora con el administrador que la hizo. |
+| **Administración de usuarios (solo ADMIN)** | Nombre, apellido, teléfono (8 dígitos de Guatemala; se guarda como `+502XXXXXXXX`), correo y código corporativo únicos, rol y estado. **El administrador no define contraseñas:** al crear el usuario se envía una invitación de 48 h para que la cree él mismo. Desactivar corta sus sesiones al instante. Un usuario con pedidos no se elimina, se desactiva. El admin no puede desactivarse ni eliminarse a sí mismo y siempre queda al menos un administrador activo. Todo usuario nuevo configura Google Authenticator en su primer ingreso. | Separación de funciones y trazabilidad: cada alta, cambio o baja queda en la bitácora con el administrador que la hizo. |
 
 ---
 
