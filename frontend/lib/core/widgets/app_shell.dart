@@ -156,6 +156,52 @@ class StatusPill extends StatelessWidget {
   }
 }
 
+/// Casilla con texto clicable. Se usa en lugar de CheckboxListTile dentro de tarjetas con fondo propio,
+/// donde el efecto de toque del ListTile quedaría oculto.
+class Casilla extends StatelessWidget {
+  const Casilla({super.key, required this.valor, required this.alCambiar, required this.texto, this.detalle});
+
+  final bool valor;
+  final ValueChanged<bool>? alCambiar;
+  final String texto;
+  final String? detalle;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: alCambiar == null ? null : () => alCambiar!(!valor),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox.square(
+              dimension: 32,
+              child: Checkbox(value: valor, onChanged: alCambiar == null ? null : (v) => alCambiar!(v ?? false)),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(texto, style: theme.textTheme.bodyMedium),
+                    if (detalle != null)
+                      Text(detalle!, style: theme.textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// Aviso de error o información dentro de una página.
 class InlineBanner extends StatelessWidget {
   const InlineBanner.error(this.mensaje, {super.key})

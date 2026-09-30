@@ -3,9 +3,10 @@ import 'package:flutter/foundation.dart';
 import '../../core/network/api_exception.dart';
 import '../../core/security/session.dart';
 import '../../core/security/token_storage.dart';
+import '../../data/models/seguridad.dart';
 import '../../data/repositories/auth_repository.dart';
 
-enum SessionStatus { restoring, unauthenticated, authenticated }
+enum SessionStatus { restoring, unauthenticated, segundoFactor, authenticated }
 
 class SessionController extends ChangeNotifier {
   SessionController(this._auth, this._storage);
@@ -15,17 +16,32 @@ class SessionController extends ChangeNotifier {
 
   SessionStatus _status = SessionStatus.restoring;
   Session? _session;
-  bool _loggingIn = false;
+  SegundoFactorRequerido? _desafio;
+  String? _emailRecordado;
+  bool _procesando = false;
   String? _error;
+  String? _aviso;
 
   SessionStatus get status => _status;
   Session? get session => _session;
-  bool get loggingIn => _loggingIn;
 
-  /// Mensaje para la pantalla de login (credenciales inválidas, sesión expirada, etc.).
+  /// Segundo factor pendiente (tras validar la contraseña).
+  SegundoFactorRequerido? get desafio => _desafio;
+
+  String? get emailRecordado => _emailRecordado;
+  bool get procesando => _procesando;
+
+  // Alias usado por la pantalla de login.
+  bool get loggingIn => _procesando;
+
+  /// Mensaje de error para la pantalla actual (credenciales inválidas, código incorrecto, sesión expirada...).
   String? get error => _error;
 
+  /// Mensaje informativo (p. ej. "enviamos un nuevo código").
+  String? get aviso => _aviso;
+
   Future<void> restore() async {
+    _emailRecordado = await _storage.leerEmailRecordado();
     final guardada = await _storage.read();
     if (guardada == null || guardada.expirada) {
       await _storage.clear();
@@ -35,30 +51,96 @@ class SessionController extends ChangeNotifier {
     }
   }
 
-  Future<void> login(String username, String password) async {
-    if (_loggingIn) return;
-    _loggingIn = true;
-    _error = null;
-    notifyListeners();
+  Future<void> login(String email, String password, {bool recordar = false}) async {
+    await _ejecutar(() async {
+      email = email.trim();
+      await _storage.recordarEmail(recordar ? email : null);
+      _emailRecordado = recordar ? email : null;
 
-    try {
-      final nueva = await _auth.login(username.trim(), password);
-      await _storage.save(nueva);
-      _set(SessionStatus.authenticated, nueva);
-    } on ApiException catch (e) {
-      _error = e.message;
-    } finally {
-      _loggingIn = false;
-      notifyListeners();
-    }
+      final resultado = await _auth.login(email, password, tokenDispositivo: await _storage.leerTokenDispositivo());
+      switch (resultado) {
+        case SesionIniciada():
+          await _iniciar(resultado);
+        case SegundoFactorRequerido():
+          _desafio = resultado;
+          _set(SessionStatus.segundoFactor, null);
+      }
+    });
+  }
+
+  Future<void> verificarCodigo(String codigo, {bool confiarDispositivo = false}) async {
+    final desafio = _desafio;
+    if (desafio == null) return;
+    await _ejecutar(() async {
+      final resultado =
+          await _auth.verificarSegundoFactor(desafio.desafio, codigo.trim(), confiarDispositivo: confiarDispositivo);
+      await _iniciar(resultado);
+    }, alFallar: (e) {
+      // Desafío vencido o agotado: hay que volver a escribir la contraseña.
+      if (e.statusCode == 400) {
+        _desafio = null;
+        _set(SessionStatus.unauthenticated, null);
+      }
+    });
+  }
+
+  Future<void> reenviarCodigo() async {
+    final desafio = _desafio;
+    if (desafio == null) return;
+    await _ejecutar(() async => _aviso = await _auth.reenviarCodigo(desafio.desafio));
+  }
+
+  void cancelarSegundoFactor() {
+    _desafio = null;
+    _error = null;
+    _aviso = null;
+    _set(SessionStatus.unauthenticated, null);
+  }
+
+  /// Tras cambiar la contraseña o desactivar el 2FA el servidor emite un token nuevo (el anterior se invalidó).
+  Future<void> actualizarSesion(Session nueva) async {
+    await _storage.save(nueva);
+    _set(SessionStatus.authenticated, nueva);
   }
 
   /// [expirada]: se llamó por un 401 del servidor, no por el botón de salir.
   Future<void> logout({bool expirada = false}) async {
     if (_status == SessionStatus.unauthenticated) return;
     await _storage.clear();
-    _error = expirada ? 'Su sesión expiró. Inicie sesión de nuevo.' : null;
+    _desafio = null;
+    _aviso = null;
+    _error = expirada ? 'Tu sesión expiró. Inicia sesión de nuevo.' : null;
     _set(SessionStatus.unauthenticated, null);
+  }
+
+  void limpiarMensajes() {
+    _error = null;
+    _aviso = null;
+    notifyListeners();
+  }
+
+  Future<void> _iniciar(SesionIniciada resultado) async {
+    if (resultado.tokenDispositivo != null) await _storage.guardarTokenDispositivo(resultado.tokenDispositivo!);
+    await _storage.save(resultado.session);
+    _desafio = null;
+    _set(SessionStatus.authenticated, resultado.session);
+  }
+
+  Future<void> _ejecutar(Future<void> Function() accion, {void Function(ApiException e)? alFallar}) async {
+    if (_procesando) return;
+    _procesando = true;
+    _error = null;
+    _aviso = null;
+    notifyListeners();
+    try {
+      await accion();
+    } on ApiException catch (e) {
+      _error = e.message;
+      alFallar?.call(e);
+    } finally {
+      _procesando = false;
+      notifyListeners();
+    }
   }
 
   void _set(SessionStatus status, Session? session) {
