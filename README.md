@@ -72,7 +72,7 @@ flutter run -d chrome --web-port 8081 --dart-define=API_URL=http://localhost:508
 | Correo | Contraseña | Rol | 2FA | Puede |
 |---|---|---|---|---|
 | `vendedor@pedidos.local` | `Vendedor123!` | VENDEDOR | No (lo puede activar en "Seguridad de la cuenta") | Ver el catálogo, crear pedidos y ver **sus** pedidos |
-| `admin@pedidos.local` | `AdminPedidos2026!` | ADMIN | **SMS** al `+502 5555 0101` (obligatorio para ADMIN) | Ver cualquier pedido y la bitácora de accesos; no crea pedidos |
+| `admin@pedidos.local` | `AdminPedidos2026!` | ADMIN | **Google Authenticator** (obligatorio para ADMIN; se configura con un QR en el primer ingreso) | Ver cualquier pedido, administrar usuarios y ver la bitácora; no crea pedidos |
 
 **Cómo entrar como admin la primera vez:** instala **Google Authenticator** en tu teléfono (gratis en Play Store o App Store). Después de la contraseña, el sistema muestra un **código QR**: escanéalo con la app (o escribe la clave que aparece debajo) y escribe el código de 6 dígitos que muestra la app. Al activarse aparecen **10 códigos de respaldo**: guárdalos, sirven si pierdes el teléfono. Desde entonces, cada inicio de sesión pide el código de la app (salvo que marques "Confiar en este dispositivo por 30 días").
 
@@ -130,7 +130,7 @@ for i in $(seq 1 10); do curl -s -o /dev/null -w "%{http_code}\n" -X POST http:/
 | POST | `/api/auth/login/reenviar` | Público (con el desafío) | 200 · 400 si no pasaron 30 s |
 | POST | `/api/auth/recuperar` | Público (5 cada 15 min por IP) | 202, siempre la misma respuesta (no revela si el correo existe) |
 | POST | `/api/auth/restablecer` | Público (con el token del correo) | 200 · 400 enlace vencido o usado, o contraseña que no cumple la política |
-| GET/POST | `/api/cuenta/...` | Autenticado | Estado de seguridad, cambio de contraseña, activar/desactivar 2FA (TOTP o SMS), códigos de respaldo, accesos propios |
+| GET/POST | `/api/cuenta/...` | Autenticado | Estado de seguridad, cambio de contraseña, activar/desactivar Google Authenticator, códigos de respaldo, accesos propios |
 | GET | `/api/admin/bitacora` | ADMIN | Últimos 100 eventos de seguridad de todos los usuarios |
 | GET/POST/PUT/DELETE | `/api/admin/usuarios[/{id}]` | ADMIN | Listar (`?buscar=`), crear (envía invitación), editar, `/activar`, `/desactivar`, `/invitacion`, eliminar (solo sin pedidos) · 400 validación · 403 no admin · 404 |
 | GET | `/api/productos` | Autenticado | 200 `[{ id, codigo, nombre, precio, stock }]` · 401 |
