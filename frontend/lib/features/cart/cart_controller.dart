@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 
 import '../../core/network/api_exception.dart';
+import '../../data/models/erp.dart';
 import '../../data/models/pedido.dart';
 import '../../data/models/producto.dart';
 import '../../data/repositories/pedido_repository.dart';
@@ -28,10 +29,26 @@ class CartController extends ChangeNotifier {
   bool _enviando = false;
   String? _error;
 
+  /// null: consumidor final (CF), el cliente por defecto de la factura.
+  Cliente? _cliente;
+  String _formaPago = 'EFECTIVO';
+
   List<CartItem> get items => List.unmodifiable(_items.values);
   bool get vacio => _items.isEmpty;
   bool get enviando => _enviando;
   String? get error => _error;
+  Cliente? get cliente => _cliente;
+  String get formaPago => _formaPago;
+
+  void elegirCliente(Cliente? cliente) {
+    _cliente = cliente;
+    notifyListeners();
+  }
+
+  void elegirFormaPago(String forma) {
+    _formaPago = forma;
+    notifyListeners();
+  }
 
   int get totalUnidades => _items.values.fold(0, (s, i) => s + i.cantidad);
 
@@ -70,6 +87,8 @@ class CartController extends ChangeNotifier {
   void vaciar() {
     _items.clear();
     _error = null;
+    _cliente = null;
+    _formaPago = 'EFECTIVO';
     notifyListeners();
   }
 
@@ -82,10 +101,14 @@ class CartController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final pedido = await _pedidos.crear(_items.values
-          .map((i) => LineaPedido(productoId: i.producto.id, cantidad: i.cantidad))
-          .toList());
+      final pedido = await _pedidos.crear(
+        _items.values.map((i) => LineaPedido(productoId: i.producto.id, cantidad: i.cantidad)).toList(),
+        clienteId: _cliente?.id,
+        formaPago: _formaPago,
+      );
       _items.clear();
+      _cliente = null;
+      _formaPago = 'EFECTIVO';
       return pedido;
     } on UnauthorizedException {
       return null; // La sesión se cierra y la app vuelve al login.

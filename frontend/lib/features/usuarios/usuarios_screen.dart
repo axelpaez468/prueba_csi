@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/network/api_exception.dart';
+import '../../core/security/permisos.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_shell.dart';
 import '../../data/models/usuario.dart';
@@ -304,7 +305,7 @@ class _FilaUsuario extends StatelessWidget {
 
     final rol = u.esAdmin
         ? const StatusPill(texto: 'Administrador', color: AppColors.primary, fondo: Color(0xFFE8EEF7))
-        : const StatusPill(texto: 'Vendedor', color: AppColors.textSecondary, fondo: AppColors.background);
+        : StatusPill(texto: Roles.nombre(u.rol), color: AppColors.textSecondary, fondo: AppColors.background);
     final estado = !u.activo
         ? const StatusPill(texto: 'Inactivo', color: AppColors.danger, fondo: AppColors.dangerBg)
         : !u.tieneContrasena

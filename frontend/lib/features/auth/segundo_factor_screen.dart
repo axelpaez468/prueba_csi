@@ -76,7 +76,7 @@ class _SegundoFactorScreenState extends State<SegundoFactorScreen> {
       icono: configurando ? Icons.qr_code_2 : Icons.phonelink_lock_outlined,
       titulo: configurando ? 'Configura la verificación en dos pasos' : 'Verificación en dos pasos',
       subtitulo: configurando
-          ? 'Por tu rol, necesitas Google Authenticator para entrar. Solo lo configurarás esta vez.'
+          ? 'Para entrar necesitas Google Authenticator (es obligatorio para todos los usuarios). Solo lo configurarás esta vez.'
           : _usarRespaldo
               ? 'Escribe uno de tus códigos de respaldo (formato XXXXX-XXXXX). Cada código funciona una sola vez.'
               : 'Abre Google Authenticator en tu teléfono y escribe el código de 6 dígitos de "Sistema de Pedidos".',

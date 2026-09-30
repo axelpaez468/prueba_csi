@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/security/permisos.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_shell.dart';
 import '../auth/session_controller.dart';
@@ -9,6 +10,7 @@ import '../cart/cart_screen.dart';
 import '../cuenta/bitacora_screen.dart';
 import '../cuenta/seguridad_screen.dart';
 import '../usuarios/usuarios_screen.dart';
+import 'modulos.dart';
 
 /// Barra superior común: logo, acceso al carrito y menú del usuario.
 class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
@@ -36,7 +38,10 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
         ],
       ),
       actions: [
-        if (mostrarCarrito) _BotonCarrito(compacto: compacto),
+        _MenuModulos(compacto: compacto),
+        const SizedBox(width: 8),
+        if (mostrarCarrito && (context.watch<SessionController>().session?.puedeVender ?? false))
+          _BotonCarrito(compacto: compacto),
         const SizedBox(width: 8),
         _MenuUsuario(compacto: compacto),
         SizedBox(width: compacto ? 8 : 16),
@@ -101,8 +106,7 @@ class _MenuUsuario extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(session.username, style: theme.textTheme.titleSmall?.copyWith(color: AppColors.textPrimary)),
-              Text(session.esVendedor ? 'Vendedor' : 'Administrador',
-                  style: theme.textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
+              Text(session.nombreRol, style: theme.textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
             ],
           ),
         ),
@@ -144,8 +148,7 @@ class _MenuUsuario extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(session.username, style: theme.textTheme.labelLarge),
-                  Text(session.esVendedor ? 'Vendedor' : 'Administrador',
-                      style: theme.textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
+                  Text(session.nombreRol, style: theme.textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
                 ],
               ),
               const Icon(Icons.expand_more, color: AppColors.textSecondary),
@@ -153,6 +156,58 @@ class _MenuUsuario extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Acceso a los módulos que el rol del usuario puede usar, agrupados por área.
+class _MenuModulos extends StatelessWidget {
+  const _MenuModulos({required this.compacto});
+
+  final bool compacto;
+
+  @override
+  Widget build(BuildContext context) {
+    final session = context.watch<SessionController>().session;
+    if (session == null) return const SizedBox.shrink();
+    final disponibles = modulosDe(session);
+    if (disponibles.isEmpty) return const SizedBox.shrink();
+
+    final items = <PopupMenuEntry<Modulo>>[];
+    String? grupo;
+    for (final m in disponibles) {
+      if (m.grupo != grupo) {
+        if (grupo != null) items.add(const PopupMenuDivider());
+        grupo = m.grupo;
+        items.add(PopupMenuItem<Modulo>(
+          enabled: false,
+          height: 28,
+          child: Text(m.grupo.toUpperCase(),
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.6, color: AppColors.textSecondary)),
+        ));
+      }
+      items.add(PopupMenuItem<Modulo>(
+        value: m,
+        child: Row(children: [Icon(m.icono, size: 18), const SizedBox(width: 10), Text(m.titulo)]),
+      ));
+    }
+
+    return PopupMenuButton<Modulo>(
+      tooltip: 'Módulos',
+      position: PopupMenuPosition.under,
+      onSelected: (m) => abrirModulo(context, m),
+      itemBuilder: (_) => items,
+      child: compacto
+          ? const Padding(padding: EdgeInsets.all(8), child: Icon(Icons.apps))
+          : const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.apps, size: 20),
+                SizedBox(width: 6),
+                Text('Módulos', style: TextStyle(fontWeight: FontWeight.w600)),
+                Icon(Icons.expand_more, size: 18),
+              ]),
+            ),
     );
   }
 }

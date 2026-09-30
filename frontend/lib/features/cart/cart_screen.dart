@@ -4,9 +4,11 @@ import 'package:provider/provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/util/formatters.dart';
 import '../../core/widgets/app_shell.dart';
+import '../../data/models/erp.dart';
 import '../auth/session_controller.dart';
 import '../catalog/catalog_controller.dart';
 import '../catalog/producto_imagen.dart';
+import '../clientes/clientes_screen.dart';
 import '../order/order_confirmation_screen.dart';
 import '../shell/app_top_bar.dart';
 import 'cart_controller.dart';
@@ -272,22 +274,26 @@ class _Resumen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Resumen del pedido', style: theme.textTheme.titleMedium),
+            Text('Resumen de la venta', style: theme.textTheme.titleMedium),
             const SizedBox(height: 16),
             _Fila('Productos', '${carrito.items.length}'),
             const SizedBox(height: 8),
             _Fila('Unidades', '${carrito.totalUnidades}'),
             const Padding(padding: EdgeInsets.symmetric(vertical: 14), child: Divider()),
+            if (esVendedor) ...[
+              const _Facturacion(),
+              const Padding(padding: EdgeInsets.symmetric(vertical: 14), child: Divider()),
+            ],
             Row(
               children: [
-                Expanded(child: Text('Subtotal referencial', style: theme.textTheme.titleSmall)),
+                Expanded(child: Text('Total referencial', style: theme.textTheme.titleSmall)),
                 Text(formatearMoneda(carrito.subtotalReferencial),
                     style: theme.textTheme.titleLarge?.copyWith(color: AppColors.primary)),
               ],
             ),
             const SizedBox(height: 8),
             Text(
-              'Es un estimado. El total definitivo lo calcula el sistema al confirmar, con los precios vigentes.',
+              'Precios con IVA incluido. Es un estimado: el total definitivo lo calcula el sistema al confirmar, con los precios vigentes.',
               style: theme.textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
             ),
             if (carrito.error != null) ...[
@@ -296,7 +302,7 @@ class _Resumen extends StatelessWidget {
             ],
             if (!esVendedor) ...[
               const SizedBox(height: 16),
-              const InlineBanner.info('Solo los usuarios con rol Vendedor pueden confirmar pedidos.'),
+              const InlineBanner.info('Solo los usuarios con rol Vendedor pueden registrar ventas.'),
             ],
             const SizedBox(height: 20),
             FilledButton.icon(
@@ -307,7 +313,7 @@ class _Resumen extends StatelessWidget {
                   ? const SizedBox.square(
                       dimension: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                   : const Icon(Icons.check_circle_outline),
-              label: Text(carrito.enviando ? 'Procesando...' : 'Confirmar pedido'),
+              label: Text(carrito.enviando ? 'Procesando...' : 'Confirmar y facturar'),
             ),
             const SizedBox(height: 10),
             OutlinedButton(
@@ -335,6 +341,71 @@ class _Fila extends StatelessWidget {
         Expanded(
             child: Text(etiqueta, style: theme.textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary))),
         Text(valor, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+      ],
+    );
+  }
+}
+
+/// Cliente (NIT) y forma de pago de la factura. La venta es siempre de contado.
+class _Facturacion extends StatelessWidget {
+  const _Facturacion();
+
+  @override
+  Widget build(BuildContext context) {
+    final carrito = context.watch<CartController>();
+    final theme = Theme.of(context);
+    final cliente = carrito.cliente;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('Facturar a', style: theme.textTheme.titleSmall),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+          decoration: BoxDecoration(
+            border: Border.all(color: AppColors.border),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Row(children: [
+            Icon(cliente == null ? Icons.person_outline : Icons.business_outlined, color: AppColors.textSecondary),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(cliente?.nombre ?? 'Consumidor Final',
+                    key: const Key('cliente-factura'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                Text('NIT ${cliente?.nitFormateado ?? 'CF'}',
+                    style: theme.textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
+              ]),
+            ),
+            TextButton(
+              onPressed: carrito.enviando
+                  ? null
+                  : () async {
+                      final elegido = await showDialog<Cliente>(
+                          context: context, builder: (_) => const SeleccionarClienteDialog());
+                      if (elegido != null) {
+                        carrito.elegirCliente(elegido.esConsumidorFinal ? null : elegido);
+                      }
+                    },
+              child: const Text('Cambiar'),
+            ),
+          ]),
+        ),
+        const SizedBox(height: 12),
+        DropdownButtonFormField<String>(
+          initialValue: carrito.formaPago,
+          isExpanded: true,
+          decoration: const InputDecoration(labelText: 'Forma de pago (contado)', isDense: true),
+          items: [
+            for (final f in const ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA'])
+              DropdownMenuItem(value: f, child: Text(formaPagoLegible(f))),
+          ],
+          onChanged: carrito.enviando ? null : (v) => carrito.elegirFormaPago(v ?? 'EFECTIVO'),
+        ),
       ],
     );
   }

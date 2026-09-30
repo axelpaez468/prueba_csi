@@ -9,19 +9,45 @@ class LineaPedido {
   Map<String, dynamic> toJson() => {'productoId': productoId, 'cantidad': cantidad};
 }
 
-/// Pedido tal como lo devuelve la API (precios y total definitivos).
+/// Venta (pedido) y su factura tal como la devuelve la API (precios y total definitivos).
+/// Los datos de factura son opcionales para seguir leyendo el contrato original del pedido.
 class Pedido {
   const Pedido({
     required this.numero,
     required this.fecha,
     required this.total,
     required this.lineas,
-  });
+    this.serie = 'A',
+    this.autorizacion,
+    this.clienteNit = 'CF',
+    this.clienteNombre = 'Consumidor Final',
+    this.clienteDireccion,
+    this.vendedor,
+    this.formaPago = 'EFECTIVO',
+    double? baseImponible,
+    double? iva,
+  })  : baseImponible = baseImponible ?? total / 1.12,
+        iva = iva ?? total - total / 1.12;
 
   final int numero;
   final DateTime fecha;
   final double total;
   final List<PedidoLinea> lineas;
+  final String serie;
+
+  /// Número de autorización (simulación de FEL).
+  final String? autorizacion;
+  final String clienteNit;
+  final String clienteNombre;
+  final String? clienteDireccion;
+  final String? vendedor;
+  final String formaPago;
+
+  /// El precio incluye IVA: total = base imponible + IVA.
+  final double baseImponible;
+  final double iva;
+
+  String get numeroFactura => '$serie-$numero';
 
   factory Pedido.fromJson(Map<String, dynamic> json) => Pedido(
         numero: json['numero'] as int,
@@ -30,6 +56,15 @@ class Pedido {
         lineas: (json['lineas'] as List)
             .map((l) => PedidoLinea.fromJson(l as Map<String, dynamic>))
             .toList(),
+        serie: (json['serie'] as String?) ?? 'A',
+        autorizacion: json['autorizacion'] as String?,
+        clienteNit: (json['clienteNit'] as String?) ?? 'CF',
+        clienteNombre: (json['clienteNombre'] as String?) ?? 'Consumidor Final',
+        clienteDireccion: json['clienteDireccion'] as String?,
+        vendedor: json['vendedor'] as String?,
+        formaPago: (json['formaPago'] as String?) ?? 'EFECTIVO',
+        baseImponible: (json['baseImponible'] as num?)?.toDouble(),
+        iva: (json['iva'] as num?)?.toDouble(),
       );
 }
 

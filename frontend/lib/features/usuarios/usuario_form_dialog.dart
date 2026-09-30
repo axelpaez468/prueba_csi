@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/network/api_exception.dart';
+import '../../core/security/permisos.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_shell.dart';
 import '../../data/models/usuario.dart';
@@ -161,14 +162,13 @@ class _UsuarioFormDialogState extends State<UsuarioFormDialog> {
                   initialValue: _rol,
                   isExpanded: true,
                   decoration: const InputDecoration(labelText: 'Rol', prefixIcon: Icon(Icons.admin_panel_settings_outlined)),
-                  items: const [
-                    DropdownMenuItem(value: 'VENDEDOR', child: Text('Vendedor')),
-                    DropdownMenuItem(value: 'ADMIN', child: Text('Administrador')),
+                  items: [
+                    for (final r in Roles.todos) DropdownMenuItem(value: r, child: Text(Roles.nombre(r))),
                   ],
                   onChanged: _guardando ? null : (v) => setState(() => _rol = v ?? 'VENDEDOR'),
                 ),
                 const SizedBox(height: 8),
-                Text('Todos los usuarios configuran Google Authenticator en su primer inicio de sesión.',
+                Text('${Roles.descripcion(_rol)} Todos los usuarios configuran Google Authenticator en su primer inicio de sesión.',
                     style: theme.textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
                 if (_esAlta) ...[
                   const SizedBox(height: 16),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 
@@ -8,6 +9,7 @@ import 'core/security/token_storage.dart';
 import 'core/theme/app_theme.dart';
 import 'data/repositories/auth_repository.dart';
 import 'data/repositories/cuenta_repository.dart';
+import 'data/repositories/erp_repositories.dart';
 import 'data/repositories/pedido_repository.dart';
 import 'data/repositories/producto_repository.dart';
 import 'data/repositories/usuario_repository.dart';
@@ -17,7 +19,7 @@ import 'features/auth/segundo_factor_screen.dart';
 import 'features/auth/session_controller.dart';
 import 'features/cart/cart_controller.dart';
 import 'features/catalog/catalog_controller.dart';
-import 'features/catalog/catalog_screen.dart';
+import 'features/shell/modulos.dart';
 
 /// Composición de dependencias: core -> data -> features.
 class PedidosApp extends StatefulWidget {
@@ -38,6 +40,7 @@ class _PedidosAppState extends State<PedidosApp> {
   late final SessionController _session;
   late final CatalogController _catalogo;
   late final CartController _carrito;
+  late final PedidoRepository _pedidos;
 
   SessionStatus? _ultimoEstado;
 
@@ -56,7 +59,8 @@ class _PedidosAppState extends State<PedidosApp> {
     _cuentaRepo = CuentaRepository(_api);
     _session = SessionController(_authRepo, _storage);
     _catalogo = CatalogController(ProductoRepository(_api));
-    _carrito = CartController(PedidoRepository(_api));
+    _pedidos = PedidoRepository(_api);
+    _carrito = CartController(_pedidos);
 
     // Cualquier 401 en una petición autenticada cierra la sesión.
     _api.onUnauthorized = () => _session.logout(expirada: true);
@@ -91,12 +95,21 @@ class _PedidosAppState extends State<PedidosApp> {
         Provider.value(value: _authRepo),
         Provider.value(value: _cuentaRepo),
         Provider.value(value: UsuarioRepository(_api)),
+        Provider.value(value: _pedidos),
+        Provider.value(value: ClienteRepository(_api)),
+        Provider.value(value: InventarioRepository(_api)),
+        Provider.value(value: CompraRepository(_api)),
+        Provider.value(value: ContabilidadRepository(_api)),
+        Provider.value(value: PanelRepository(_api)),
         ChangeNotifierProvider.value(value: _session),
         ChangeNotifierProvider.value(value: _catalogo),
         ChangeNotifierProvider.value(value: _carrito),
       ],
       child: MaterialApp(
         title: 'Sistema de Pedidos',
+        locale: const Locale('es', 'GT'),
+        supportedLocales: const [Locale('es', 'GT'), Locale('es')],
+        localizationsDelegates: GlobalMaterialLocalizations.delegates,
         navigatorKey: _navigatorKey,
         scaffoldMessengerKey: _messengerKey,
         debugShowCheckedModeBanner: false,
@@ -116,7 +129,8 @@ class _PedidosAppState extends State<PedidosApp> {
               SessionStatus.restoring => const Scaffold(body: Center(child: CircularProgressIndicator())),
               SessionStatus.unauthenticated => const LoginScreen(),
               SessionStatus.segundoFactor => const SegundoFactorScreen(),
-              SessionStatus.authenticated => const CatalogScreen(),
+              // El vendedor empieza en el catálogo; los demás roles, en el panel de indicadores.
+              SessionStatus.authenticated => inicioDe(session.session!),
             };
           },
         ),

@@ -1,0 +1,648 @@
+import '../../core/util/formatters.dart';
+
+double _d(Object? v) => (v as num?)?.toDouble() ?? 0;
+
+// ---------- Clientes y proveedores ----------
+
+class Cliente {
+  const Cliente({
+    required this.id,
+    required this.nit,
+    required this.nitFormateado,
+    required this.nombre,
+    this.direccion,
+    this.telefono,
+    this.email,
+    required this.activo,
+    required this.esConsumidorFinal,
+  });
+
+  final int id;
+  final String nit;
+  final String nitFormateado;
+  final String nombre;
+  final String? direccion;
+  final String? telefono;
+  final String? email;
+  final bool activo;
+  final bool esConsumidorFinal;
+
+  factory Cliente.fromJson(Map<String, dynamic> j) => Cliente(
+        id: j['id'] as int,
+        nit: j['nit'] as String,
+        nitFormateado: j['nitFormateado'] as String,
+        nombre: j['nombre'] as String,
+        direccion: j['direccion'] as String?,
+        telefono: j['telefono'] as String?,
+        email: j['email'] as String?,
+        activo: j['activo'] as bool,
+        esConsumidorFinal: j['esConsumidorFinal'] as bool,
+      );
+}
+
+class Proveedor {
+  const Proveedor({
+    required this.id,
+    required this.nit,
+    required this.nitFormateado,
+    required this.nombre,
+    this.contacto,
+    this.telefono,
+    this.email,
+    this.direccion,
+    required this.activo,
+  });
+
+  final int id;
+  final String nit;
+  final String nitFormateado;
+  final String nombre;
+  final String? contacto;
+  final String? telefono;
+  final String? email;
+  final String? direccion;
+  final bool activo;
+
+  factory Proveedor.fromJson(Map<String, dynamic> j) => Proveedor(
+        id: j['id'] as int,
+        nit: j['nit'] as String,
+        nitFormateado: j['nitFormateado'] as String,
+        nombre: j['nombre'] as String,
+        contacto: j['contacto'] as String?,
+        telefono: j['telefono'] as String?,
+        email: j['email'] as String?,
+        direccion: j['direccion'] as String?,
+        activo: j['activo'] as bool,
+      );
+}
+
+/// "+50255550101" → "+502 5555 0101"; los 8 dígitos locales para editar.
+String telefonoLegible(String? telefono) {
+  if (telefono == null) return '';
+  final l = telefono.startsWith('+502') ? telefono.substring(4) : telefono;
+  return l.length == 8 ? '+502 ${l.substring(0, 4)} ${l.substring(4)}' : telefono;
+}
+
+String telefonoLocal(String? telefono) =>
+    telefono == null ? '' : (telefono.startsWith('+502') ? telefono.substring(4) : telefono);
+
+// ---------- Ventas ----------
+
+class VentaResumen {
+  const VentaResumen({
+    required this.numero,
+    required this.serie,
+    required this.fecha,
+    required this.clienteNit,
+    required this.clienteNombre,
+    required this.vendedor,
+    required this.formaPago,
+    required this.productos,
+    required this.total,
+  });
+
+  final int numero;
+  final String serie;
+  final DateTime fecha;
+  final String clienteNit;
+  final String clienteNombre;
+  final String vendedor;
+  final String formaPago;
+  final int productos;
+  final double total;
+
+  factory VentaResumen.fromJson(Map<String, dynamic> j) => VentaResumen(
+        numero: j['numero'] as int,
+        serie: j['serie'] as String,
+        fecha: DateTime.parse(j['fecha'] as String),
+        clienteNit: j['clienteNit'] as String,
+        clienteNombre: j['clienteNombre'] as String,
+        vendedor: j['vendedor'] as String,
+        formaPago: j['formaPago'] as String,
+        productos: j['productos'] as int,
+        total: _d(j['total']),
+      );
+}
+
+String formaPagoLegible(String forma) => switch (forma) {
+      'EFECTIVO' => 'Efectivo',
+      'TARJETA' => 'Tarjeta',
+      'TRANSFERENCIA' => 'Transferencia',
+      _ => forma,
+    };
+
+// ---------- Inventario ----------
+
+class ProductoInventario {
+  const ProductoInventario({
+    required this.id,
+    required this.codigo,
+    required this.nombre,
+    required this.precio,
+    required this.stock,
+    required this.stockMinimo,
+    required this.costoPromedio,
+    required this.valorInventario,
+    required this.activo,
+    required this.bajoMinimo,
+    this.margen,
+  });
+
+  final int id;
+  final String codigo;
+  final String nombre;
+  final double precio;
+  final int stock;
+  final int stockMinimo;
+  final double costoPromedio;
+  final double valorInventario;
+  final bool activo;
+  final bool bajoMinimo;
+  final double? margen;
+
+  factory ProductoInventario.fromJson(Map<String, dynamic> j) => ProductoInventario(
+        id: j['id'] as int,
+        codigo: j['codigo'] as String,
+        nombre: j['nombre'] as String,
+        precio: _d(j['precio']),
+        stock: j['stock'] as int,
+        stockMinimo: j['stockMinimo'] as int,
+        costoPromedio: _d(j['costoPromedio']),
+        valorInventario: _d(j['valorInventario']),
+        activo: j['activo'] as bool,
+        bajoMinimo: j['bajoMinimo'] as bool,
+        margen: (j['margen'] as num?)?.toDouble(),
+      );
+}
+
+class MovimientoInventario {
+  const MovimientoInventario({
+    required this.id,
+    required this.fecha,
+    required this.tipo,
+    required this.cantidad,
+    required this.costoUnitario,
+    required this.saldo,
+    required this.costoPromedio,
+    required this.referencia,
+    this.usuario,
+  });
+
+  final int id;
+  final DateTime fecha;
+  final String tipo;
+  final int cantidad;
+  final double costoUnitario;
+  final int saldo;
+  final double costoPromedio;
+  final String referencia;
+  final String? usuario;
+
+  bool get esEntrada => cantidad > 0;
+
+  String get tipoLegible => switch (tipo) {
+        'INICIAL' => 'Inventario inicial',
+        'VENTA' => 'Venta',
+        'COMPRA' => 'Compra',
+        'AJUSTE_ENTRADA' => 'Ajuste (entrada)',
+        'AJUSTE_SALIDA' => 'Ajuste (salida)',
+        _ => tipo,
+      };
+
+  factory MovimientoInventario.fromJson(Map<String, dynamic> j) => MovimientoInventario(
+        id: j['id'] as int,
+        fecha: DateTime.parse(j['fecha'] as String),
+        tipo: j['tipo'] as String,
+        cantidad: j['cantidad'] as int,
+        costoUnitario: _d(j['costoUnitario']),
+        saldo: j['saldo'] as int,
+        costoPromedio: _d(j['costoPromedio']),
+        referencia: j['referencia'] as String,
+        usuario: j['usuario'] as String?,
+      );
+}
+
+class Kardex {
+  const Kardex(this.producto, this.movimientos);
+
+  final ProductoInventario producto;
+  final List<MovimientoInventario> movimientos;
+
+  factory Kardex.fromJson(Map<String, dynamic> j) => Kardex(
+        ProductoInventario.fromJson(j['producto'] as Map<String, dynamic>),
+        (j['movimientos'] as List).map((m) => MovimientoInventario.fromJson(m as Map<String, dynamic>)).toList(),
+      );
+}
+
+// ---------- Compras ----------
+
+class OrdenResumen {
+  const OrdenResumen({
+    required this.numero,
+    required this.fecha,
+    required this.estado,
+    required this.proveedorNombre,
+    required this.productos,
+    required this.total,
+    this.facturaProveedor,
+  });
+
+  final int numero;
+  final DateTime fecha;
+  final String estado;
+  final String proveedorNombre;
+  final int productos;
+  final double total;
+  final String? facturaProveedor;
+
+  factory OrdenResumen.fromJson(Map<String, dynamic> j) => OrdenResumen(
+        numero: j['numero'] as int,
+        fecha: DateTime.parse(j['fecha'] as String),
+        estado: j['estado'] as String,
+        proveedorNombre: j['proveedorNombre'] as String,
+        productos: j['productos'] as int,
+        total: _d(j['total']),
+        facturaProveedor: j['facturaProveedor'] as String?,
+      );
+}
+
+class LineaOrden {
+  const LineaOrden({
+    required this.productoId,
+    required this.codigo,
+    required this.nombre,
+    required this.cantidad,
+    required this.costoUnitario,
+    required this.subtotal,
+  });
+
+  final int productoId;
+  final String codigo;
+  final String nombre;
+  final int cantidad;
+  final double costoUnitario;
+  final double subtotal;
+
+  factory LineaOrden.fromJson(Map<String, dynamic> j) => LineaOrden(
+        productoId: j['productoId'] as int,
+        codigo: j['codigo'] as String,
+        nombre: j['nombre'] as String,
+        cantidad: j['cantidad'] as int,
+        costoUnitario: _d(j['costoUnitario']),
+        subtotal: _d(j['subtotal']),
+      );
+}
+
+class OrdenCompra {
+  const OrdenCompra({
+    required this.numero,
+    required this.fecha,
+    required this.estado,
+    required this.proveedorId,
+    required this.proveedorNit,
+    required this.proveedorNombre,
+    required this.subtotal,
+    required this.iva,
+    required this.total,
+    this.observaciones,
+    required this.creadaPor,
+    this.fechaRecepcion,
+    this.recibidaPor,
+    this.facturaProveedor,
+    required this.lineas,
+  });
+
+  final int numero;
+  final DateTime fecha;
+  final String estado;
+  final int proveedorId;
+  final String proveedorNit;
+  final String proveedorNombre;
+  final double subtotal;
+  final double iva;
+  final double total;
+  final String? observaciones;
+  final String creadaPor;
+  final DateTime? fechaRecepcion;
+  final String? recibidaPor;
+  final String? facturaProveedor;
+  final List<LineaOrden> lineas;
+
+  bool get pendiente => estado == 'PENDIENTE';
+
+  factory OrdenCompra.fromJson(Map<String, dynamic> j) => OrdenCompra(
+        numero: j['numero'] as int,
+        fecha: DateTime.parse(j['fecha'] as String),
+        estado: j['estado'] as String,
+        proveedorId: j['proveedorId'] as int,
+        proveedorNit: j['proveedorNit'] as String,
+        proveedorNombre: j['proveedorNombre'] as String,
+        subtotal: _d(j['subtotal']),
+        iva: _d(j['iva']),
+        total: _d(j['total']),
+        observaciones: j['observaciones'] as String?,
+        creadaPor: j['creadaPor'] as String,
+        fechaRecepcion: j['fechaRecepcion'] == null ? null : DateTime.parse(j['fechaRecepcion'] as String),
+        recibidaPor: j['recibidaPor'] as String?,
+        facturaProveedor: j['facturaProveedor'] as String?,
+        lineas: (j['lineas'] as List).map((l) => LineaOrden.fromJson(l as Map<String, dynamic>)).toList(),
+      );
+}
+
+// ---------- Contabilidad ----------
+
+class CuentaContable {
+  const CuentaContable({
+    required this.id,
+    required this.codigo,
+    required this.nombre,
+    required this.tipo,
+    required this.activa,
+    required this.esSistema,
+    required this.saldo,
+  });
+
+  final int id;
+  final String codigo;
+  final String nombre;
+  final String tipo;
+  final bool activa;
+  final bool esSistema;
+  final double saldo;
+
+  String get descripcion => '$codigo · $nombre';
+
+  factory CuentaContable.fromJson(Map<String, dynamic> j) => CuentaContable(
+        id: j['id'] as int,
+        codigo: j['codigo'] as String,
+        nombre: j['nombre'] as String,
+        tipo: j['tipo'] as String,
+        activa: j['activa'] as bool,
+        esSistema: j['esSistema'] as bool,
+        saldo: _d(j['saldo']),
+      );
+}
+
+String tipoCuentaLegible(String tipo) => switch (tipo) {
+      'ACTIVO' => 'Activo',
+      'PASIVO' => 'Pasivo',
+      'CAPITAL' => 'Capital',
+      'INGRESO' => 'Ingreso',
+      'COSTO' => 'Costo',
+      'GASTO' => 'Gasto',
+      _ => tipo,
+    };
+
+class LineaPartida {
+  const LineaPartida({required this.cuentaId, required this.codigo, required this.cuenta, required this.debe, required this.haber});
+
+  final int cuentaId;
+  final String codigo;
+  final String cuenta;
+  final double debe;
+  final double haber;
+
+  factory LineaPartida.fromJson(Map<String, dynamic> j) => LineaPartida(
+        cuentaId: j['cuentaId'] as int,
+        codigo: j['codigo'] as String,
+        cuenta: j['cuenta'] as String,
+        debe: _d(j['debe']),
+        haber: _d(j['haber']),
+      );
+}
+
+class Partida {
+  const Partida({
+    required this.numero,
+    required this.fecha,
+    required this.concepto,
+    required this.origen,
+    required this.total,
+    required this.lineas,
+  });
+
+  final int numero;
+  final DateTime fecha;
+  final String concepto;
+  final String origen;
+  final double total;
+  final List<LineaPartida> lineas;
+
+  factory Partida.fromJson(Map<String, dynamic> j) => Partida(
+        numero: j['numero'] as int,
+        fecha: leerDia(j['fecha'] as String),
+        concepto: j['concepto'] as String,
+        origen: j['origen'] as String,
+        total: _d(j['total']),
+        lineas: (j['lineas'] as List).map((l) => LineaPartida.fromJson(l as Map<String, dynamic>)).toList(),
+      );
+}
+
+class MovimientoMayor {
+  const MovimientoMayor(this.fecha, this.partida, this.concepto, this.debe, this.haber, this.saldo);
+
+  final DateTime fecha;
+  final int partida;
+  final String concepto;
+  final double debe;
+  final double haber;
+  final double saldo;
+
+  factory MovimientoMayor.fromJson(Map<String, dynamic> j) => MovimientoMayor(leerDia(j['fecha'] as String),
+      j['partida'] as int, j['concepto'] as String, _d(j['debe']), _d(j['haber']), _d(j['saldo']));
+}
+
+class LibroMayor {
+  const LibroMayor(this.cuenta, this.saldoInicial, this.totalDebe, this.totalHaber, this.saldoFinal, this.movimientos);
+
+  final CuentaContable cuenta;
+  final double saldoInicial;
+  final double totalDebe;
+  final double totalHaber;
+  final double saldoFinal;
+  final List<MovimientoMayor> movimientos;
+
+  factory LibroMayor.fromJson(Map<String, dynamic> j) => LibroMayor(
+        CuentaContable.fromJson(j['cuenta'] as Map<String, dynamic>),
+        _d(j['saldoInicial']),
+        _d(j['totalDebe']),
+        _d(j['totalHaber']),
+        _d(j['saldoFinal']),
+        (j['movimientos'] as List).map((m) => MovimientoMayor.fromJson(m as Map<String, dynamic>)).toList(),
+      );
+}
+
+class FilaBalance {
+  const FilaBalance(this.codigo, this.cuenta, this.tipo, this.debe, this.haber, this.saldoDeudor, this.saldoAcreedor);
+
+  final String codigo;
+  final String cuenta;
+  final String tipo;
+  final double debe;
+  final double haber;
+  final double saldoDeudor;
+  final double saldoAcreedor;
+
+  factory FilaBalance.fromJson(Map<String, dynamic> j) => FilaBalance(j['codigo'] as String, j['cuenta'] as String,
+      j['tipo'] as String, _d(j['debe']), _d(j['haber']), _d(j['saldoDeudor']), _d(j['saldoAcreedor']));
+}
+
+class BalanceComprobacion {
+  const BalanceComprobacion(this.filas, this.totalDebe, this.totalHaber, this.totalDeudor, this.totalAcreedor, this.cuadra);
+
+  final List<FilaBalance> filas;
+  final double totalDebe;
+  final double totalHaber;
+  final double totalDeudor;
+  final double totalAcreedor;
+  final bool cuadra;
+
+  factory BalanceComprobacion.fromJson(Map<String, dynamic> j) => BalanceComprobacion(
+        (j['filas'] as List).map((f) => FilaBalance.fromJson(f as Map<String, dynamic>)).toList(),
+        _d(j['totalDebe']),
+        _d(j['totalHaber']),
+        _d(j['totalSaldoDeudor']),
+        _d(j['totalSaldoAcreedor']),
+        j['cuadra'] as bool,
+      );
+}
+
+class Renglon {
+  const Renglon(this.codigo, this.cuenta, this.monto);
+
+  final String codigo;
+  final String cuenta;
+  final double monto;
+
+  static List<Renglon> lista(Object? json) => (json as List)
+      .map((r) => r as Map<String, dynamic>)
+      .map((r) => Renglon(r['codigo'] as String, r['cuenta'] as String, _d(r['monto'])))
+      .toList();
+}
+
+class EstadoResultados {
+  const EstadoResultados({
+    required this.ingresos,
+    required this.totalIngresos,
+    required this.costos,
+    required this.totalCostos,
+    required this.utilidadBruta,
+    required this.gastos,
+    required this.totalGastos,
+    required this.utilidadNeta,
+  });
+
+  final List<Renglon> ingresos;
+  final double totalIngresos;
+  final List<Renglon> costos;
+  final double totalCostos;
+  final double utilidadBruta;
+  final List<Renglon> gastos;
+  final double totalGastos;
+  final double utilidadNeta;
+
+  factory EstadoResultados.fromJson(Map<String, dynamic> j) => EstadoResultados(
+        ingresos: Renglon.lista(j['ingresos']),
+        totalIngresos: _d(j['totalIngresos']),
+        costos: Renglon.lista(j['costos']),
+        totalCostos: _d(j['totalCostos']),
+        utilidadBruta: _d(j['utilidadBruta']),
+        gastos: Renglon.lista(j['gastos']),
+        totalGastos: _d(j['totalGastos']),
+        utilidadNeta: _d(j['utilidadNeta']),
+      );
+}
+
+class BalanceGeneral {
+  const BalanceGeneral({
+    required this.activos,
+    required this.totalActivos,
+    required this.pasivos,
+    required this.totalPasivos,
+    required this.capital,
+    required this.resultadoDelEjercicio,
+    required this.totalCapital,
+    required this.totalPasivoYCapital,
+    required this.cuadra,
+  });
+
+  final List<Renglon> activos;
+  final double totalActivos;
+  final List<Renglon> pasivos;
+  final double totalPasivos;
+  final List<Renglon> capital;
+  final double resultadoDelEjercicio;
+  final double totalCapital;
+  final double totalPasivoYCapital;
+  final bool cuadra;
+
+  factory BalanceGeneral.fromJson(Map<String, dynamic> j) => BalanceGeneral(
+        activos: Renglon.lista(j['activos']),
+        totalActivos: _d(j['totalActivos']),
+        pasivos: Renglon.lista(j['pasivos']),
+        totalPasivos: _d(j['totalPasivos']),
+        capital: Renglon.lista(j['capital']),
+        resultadoDelEjercicio: _d(j['resultadoDelEjercicio']),
+        totalCapital: _d(j['totalCapital']),
+        totalPasivoYCapital: _d(j['totalPasivoYCapital']),
+        cuadra: j['cuadra'] as bool,
+      );
+}
+
+// ---------- Panel ----------
+
+class ProductoAlerta {
+  const ProductoAlerta(this.id, this.codigo, this.nombre, this.stock, this.stockMinimo);
+
+  final int id;
+  final String codigo;
+  final String nombre;
+  final int stock;
+  final int stockMinimo;
+}
+
+class Panel {
+  const Panel({
+    required this.ventasHoy,
+    required this.cantidadVentasHoy,
+    required this.ventasMes,
+    required this.cantidadVentasMes,
+    required this.utilidadBrutaMes,
+    required this.comprasMes,
+    required this.valorInventario,
+    required this.ordenesPendientes,
+    required this.bajoMinimo,
+    required this.ventasSemana,
+  });
+
+  final double ventasHoy;
+  final int cantidadVentasHoy;
+  final double ventasMes;
+  final int cantidadVentasMes;
+  final double utilidadBrutaMes;
+  final double comprasMes;
+  final double valorInventario;
+  final int ordenesPendientes;
+  final List<ProductoAlerta> bajoMinimo;
+  final List<(DateTime, double)> ventasSemana;
+
+  factory Panel.fromJson(Map<String, dynamic> j) => Panel(
+        ventasHoy: _d(j['ventasHoy']),
+        cantidadVentasHoy: j['cantidadVentasHoy'] as int,
+        ventasMes: _d(j['ventasMes']),
+        cantidadVentasMes: j['cantidadVentasMes'] as int,
+        utilidadBrutaMes: _d(j['utilidadBrutaMes']),
+        comprasMes: _d(j['comprasMes']),
+        valorInventario: _d(j['valorInventario']),
+        ordenesPendientes: j['ordenesPendientes'] as int,
+        bajoMinimo: (j['productosBajoMinimo'] as List)
+            .map((p) => p as Map<String, dynamic>)
+            .map((p) => ProductoAlerta(
+                p['id'] as int, p['codigo'] as String, p['nombre'] as String, p['stock'] as int, p['stockMinimo'] as int))
+            .toList(),
+        ventasSemana: (j['ventasUltimos7Dias'] as List)
+            .map((v) => v as Map<String, dynamic>)
+            .map((v) => (leerDia(v['fecha'] as String), _d(v['total'])))
+            .toList(),
+      );
+}

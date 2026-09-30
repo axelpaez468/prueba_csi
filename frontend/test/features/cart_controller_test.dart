@@ -22,7 +22,7 @@ class _PedidoRepositoryLento extends PedidoRepository {
   var llamadas = 0;
 
   @override
-  Future<Pedido> crear(List<LineaPedido> lineas) {
+  Future<Pedido> crear(List<LineaPedido> lineas, {int? clienteId, String? formaPago}) {
     llamadas++;
     return completer.future;
   }
