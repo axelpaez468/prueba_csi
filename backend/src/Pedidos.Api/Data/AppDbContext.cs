@@ -12,16 +12,88 @@ public class AppDbContext : DbContext
     public DbSet<Producto> Productos => Set<Producto>();
     public DbSet<Pedido> Pedidos => Set<Pedido>();
     public DbSet<PedidoDetalle> PedidoDetalles => Set<PedidoDetalle>();
+    public DbSet<CodigoRespaldo> CodigosRespaldo => Set<CodigoRespaldo>();
+    public DbSet<CodigoVerificacion> CodigosVerificacion => Set<CodigoVerificacion>();
+    public DbSet<TokenRecuperacion> TokensRecuperacion => Set<TokenRecuperacion>();
+    public DbSet<DispositivoConfiable> DispositivosConfiables => Set<DispositivoConfiable>();
+    public DbSet<DispositivoConocido> DispositivosConocidos => Set<DispositivoConocido>();
+    public DbSet<RegistroAcceso> BitacoraAccesos => Set<RegistroAcceso>();
 
     protected override void OnModelCreating(ModelBuilder model)
     {
         model.Entity<Usuario>(e =>
         {
-            e.ToTable("Usuarios", t => t.HasCheckConstraint("CK_Usuarios_Rol", "Rol IN ('VENDEDOR','ADMIN')"));
+            e.ToTable("Usuarios", t =>
+            {
+                t.HasCheckConstraint("CK_Usuarios_Rol", "Rol IN ('VENDEDOR','ADMIN')");
+                t.HasCheckConstraint("CK_Usuarios_DosFactor", "DosFactor IN ('NINGUNO','TOTP','SMS')");
+            });
             e.Property(u => u.Username).HasMaxLength(50).IsRequired();
+            e.Property(u => u.Email).HasMaxLength(254).IsRequired();
             e.Property(u => u.PasswordHash).HasMaxLength(100).IsRequired();
             e.Property(u => u.Rol).HasMaxLength(20).IsRequired();
+            e.Property(u => u.Telefono).HasMaxLength(20);
+            e.Property(u => u.TelefonoPendiente).HasMaxLength(20);
+            e.Property(u => u.DosFactor).HasMaxLength(10).IsRequired();
+            e.Property(u => u.TotpSecretoCifrado).HasMaxLength(200);
+            e.Property(u => u.TotpPendienteCifrado).HasMaxLength(200);
             e.HasIndex(u => u.Username).IsUnique();
+            e.HasIndex(u => u.Email).IsUnique();
+        });
+
+        model.Entity<CodigoRespaldo>(e =>
+        {
+            e.ToTable("CodigosRespaldo");
+            e.Property(c => c.CodigoHash).HasMaxLength(64).IsRequired();
+            e.HasOne<Usuario>().WithMany().HasForeignKey(c => c.UsuarioId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(c => c.UsuarioId);
+        });
+
+        model.Entity<CodigoVerificacion>(e =>
+        {
+            e.ToTable("CodigosVerificacion");
+            e.Property(c => c.Proposito).HasMaxLength(20).IsRequired();
+            e.Property(c => c.CodigoHash).HasMaxLength(64).IsRequired();
+            e.HasOne<Usuario>().WithMany().HasForeignKey(c => c.UsuarioId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(c => new { c.UsuarioId, c.Proposito });
+        });
+
+        model.Entity<TokenRecuperacion>(e =>
+        {
+            e.ToTable("TokensRecuperacion");
+            e.Property(t => t.TokenHash).HasMaxLength(64).IsRequired();
+            e.HasOne<Usuario>().WithMany().HasForeignKey(t => t.UsuarioId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(t => t.TokenHash).IsUnique();
+        });
+
+        model.Entity<DispositivoConfiable>(e =>
+        {
+            e.ToTable("DispositivosConfiables");
+            e.Property(d => d.TokenHash).HasMaxLength(64).IsRequired();
+            e.HasOne<Usuario>().WithMany().HasForeignKey(d => d.UsuarioId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(d => d.TokenHash).IsUnique();
+        });
+
+        model.Entity<DispositivoConocido>(e =>
+        {
+            e.ToTable("DispositivosConocidos");
+            e.Property(d => d.Huella).HasMaxLength(64).IsRequired();
+            e.HasOne<Usuario>().WithMany().HasForeignKey(d => d.UsuarioId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(d => new { d.UsuarioId, d.Huella }).IsUnique();
+        });
+
+        model.Entity<RegistroAcceso>(e =>
+        {
+            e.ToTable("BitacoraAccesos");
+            e.Property(r => r.Email).HasMaxLength(254).IsRequired();
+            e.Property(r => r.Evento).HasMaxLength(40).IsRequired();
+            e.Property(r => r.Ip).HasMaxLength(45);
+            e.Property(r => r.UserAgent).HasMaxLength(300);
+            e.Property(r => r.Detalle).HasMaxLength(300);
+            e.Property(r => r.Fecha).HasConversion(v => v, v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
+            // Sin FK: se registran también intentos con correos que no existen.
+            e.HasIndex(r => r.Fecha);
+            e.HasIndex(r => r.UsuarioId);
         });
 
         model.Entity<Producto>(e =>

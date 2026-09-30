@@ -3,7 +3,34 @@ namespace Pedidos.Api.Domain;
 public class Usuario
 {
     public int Id { get; set; }
+
+    /// <summary>Nombre para mostrar. El inicio de sesión es con <see cref="Email"/>.</summary>
     public string Username { get; set; } = string.Empty;
+
+    /// <summary>Siempre en minúsculas (se normaliza al guardar y al buscar).</summary>
+    public string Email { get; set; } = string.Empty;
+
     public string PasswordHash { get; set; } = string.Empty;
     public string Rol { get; set; } = Roles.Vendedor;
+
+    /// <summary>Teléfono en formato E.164 (+50255550101), usado para el 2FA por SMS.</summary>
+    public string? Telefono { get; set; }
+
+    public string DosFactor { get; set; } = MetodosDosFactor.Ninguno;
+
+    /// <summary>Secreto TOTP cifrado con AES-GCM (nunca en claro en la BD).</summary>
+    public string? TotpSecretoCifrado { get; set; }
+
+    /// <summary>Último paso TOTP aceptado: impide reutilizar el mismo código dentro de su ventana.</summary>
+    public long? TotpUltimoPaso { get; set; }
+
+    /// <summary>Configuración de 2FA en curso (aún sin confirmar).</summary>
+    public string? TotpPendienteCifrado { get; set; }
+    public string? TelefonoPendiente { get; set; }
+
+    /// <summary>
+    /// Se incrementa al cambiar la contraseña o el 2FA. Viaja en el JWT: los tokens emitidos antes
+    /// del cambio dejan de ser válidos (cierra las sesiones abiertas en otros dispositivos).
+    /// </summary>
+    public int VersionSesion { get; set; }
 }
