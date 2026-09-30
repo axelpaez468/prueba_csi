@@ -15,8 +15,21 @@ public class CorreoOptions
     public int Puerto { get; set; } = 1025;
     public string Remitente { get; set; } = "no-responder@pedidos.local";
     public string? Usuario { get; set; }
+
+    /// <summary>Solo por variable de entorno (Correo__Password). Para Gmail: una "contraseña de aplicación".</summary>
     public string? Password { get; set; }
-    public bool UsarTls { get; set; }
+
+    /// <summary>
+    /// "None" (Mailpit), "StartTls" (puerto 587) o "SslOnConnect" (puerto 465, p. ej. Gmail).
+    /// </summary>
+    public string Tls { get; set; } = "None";
+
+    public SecureSocketOptions ModoTls => Tls.ToLowerInvariant() switch
+    {
+        "starttls" => SecureSocketOptions.StartTls,
+        "sslonconnect" or "ssl" => SecureSocketOptions.SslOnConnect,
+        _ => SecureSocketOptions.None
+    };
 }
 
 public class SmsOptions
@@ -28,6 +41,12 @@ public class SmsOptions
     /// Para producción se implementaría otro <see cref="IEnviadorSms"/> (p. ej. Twilio) y se cambia este valor.
     /// </summary>
     public string Proveedor { get; set; } = "Simulado";
+
+    /// <summary>
+    /// Correo donde se entregan los SMS simulados. Vacío: una dirección ficticia por teléfono
+    /// (sms-50255550101@sms.simulado), útil con Mailpit. Con un SMTP real (Gmail) debe ser un buzón existente.
+    /// </summary>
+    public string? DestinoSimulado { get; set; }
 }
 
 public record Mensaje(string Para, string Asunto, string Texto);
@@ -61,13 +80,18 @@ public class ColaNotificaciones : IEnviadorCorreo
 public class SmsSimulado : IEnviadorSms
 {
     private readonly IEnviadorCorreo _correo;
+    private readonly string? _destino;
 
-    public SmsSimulado(IEnviadorCorreo correo) => _correo = correo;
+    public SmsSimulado(IEnviadorCorreo correo, IOptions<SmsOptions> opciones)
+    {
+        _correo = correo;
+        _destino = string.IsNullOrWhiteSpace(opciones.Value.DestinoSimulado) ? null : opciones.Value.DestinoSimulado.Trim();
+    }
 
     public void Encolar(string telefono, string texto)
     {
         var digitos = new string(telefono.Where(char.IsDigit).ToArray());
-        _correo.Encolar($"sms-{digitos}@sms.simulado", $"📱 SMS a {telefono}", texto);
+        _correo.Encolar(_destino ?? $"sms-{digitos}@sms.simulado", $"📱 SMS a {telefono}", texto);
     }
 }
 
@@ -116,8 +140,7 @@ public class ProcesadorNotificaciones : BackgroundService
         correo.Body = new TextPart("plain") { Text = m.Texto };
 
         using var smtp = new SmtpClient { Timeout = 10_000 };
-        await smtp.ConnectAsync(_opciones.Host, _opciones.Puerto,
-            _opciones.UsarTls ? SecureSocketOptions.StartTls : SecureSocketOptions.None, ct);
+        await smtp.ConnectAsync(_opciones.Host, _opciones.Puerto, _opciones.ModoTls, ct);
         if (!string.IsNullOrEmpty(_opciones.Usuario))
             await smtp.AuthenticateAsync(_opciones.Usuario, _opciones.Password ?? string.Empty, ct);
         await smtp.SendAsync(correo, ct);

@@ -63,7 +63,7 @@ public sealed class ServiciosSeguridad
     public TokenService Tokens => new(_jwt, Reloj);
 
     private SegundoFactorService SegundoFactor(AppDbContext db) =>
-        new(db, Cifrador, Totp, new SmsSimulado(Correo), Reloj);
+        new(db, Cifrador, Totp, new SmsSimulado(Correo, Options.Create(new SmsOptions())), Reloj);
 
     public AuthService Auth(AppDbContext db) =>
         new(db, Tokens, Throttle, new BitacoraService(db, Reloj), SegundoFactor(db), Cifrador, Correo, Cache, Reloj);
