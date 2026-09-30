@@ -38,11 +38,14 @@ public sealed class TestDb : IDisposable
     }
 
     // Los Ids se dejan a la BD (IDENTITY en SQL Server); al insertarse en este orden quedan 1..N.
+    public const string EmailVendedor = "vendedor@pedidos.test";
+    public const string EmailAdmin = "admin@pedidos.test";
+
     public static List<Usuario> UsuariosSemilla() => new()
     {
-        new Usuario { Username = "vendedor", PasswordHash = HashDePrueba, Rol = Roles.Vendedor },  // VendedorId
-        new Usuario { Username = "vendedor2", PasswordHash = HashDePrueba, Rol = Roles.Vendedor }, // OtroVendedorId
-        new Usuario { Username = "admin", PasswordHash = HashDePrueba, Rol = Roles.Admin }         // AdminId
+        new Usuario { Username = "vendedor", Email = EmailVendedor, PasswordHash = HashDePrueba, Rol = Roles.Vendedor }, // VendedorId
+        new Usuario { Username = "vendedor2", Email = "vendedor2@pedidos.test", PasswordHash = HashDePrueba, Rol = Roles.Vendedor }, // OtroVendedorId
+        new Usuario { Username = "admin", Email = EmailAdmin, PasswordHash = HashDePrueba, Rol = Roles.Admin } // AdminId
     };
 
     public static List<Producto> ProductosSemilla() => new()
