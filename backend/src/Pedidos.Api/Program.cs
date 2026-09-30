@@ -8,8 +8,10 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Pedidos.Api.Data;
 using Pedidos.Api.Errors;
+using Pedidos.Api.Notificaciones;
 using Pedidos.Api.Security;
 using Pedidos.Api.Services;
+using Pedidos.Api.Services.Seguridad;
 
 var builder = WebApplication.CreateBuilder(args);
 var config = builder.Configuration;
@@ -18,6 +20,15 @@ var config = builder.Configuration;
 var jwt = config.GetSection(JwtOptions.Section).Get<JwtOptions>() ?? new JwtOptions();
 jwt.Validar();
 builder.Services.Configure<JwtOptions>(config.GetSection(JwtOptions.Section));
+
+(config.GetSection(SeguridadOptions.Section).Get<SeguridadOptions>() ?? new SeguridadOptions()).Validar();
+builder.Services.Configure<SeguridadOptions>(config.GetSection(SeguridadOptions.Section));
+builder.Services.Configure<CorreoOptions>(config.GetSection(CorreoOptions.Section));
+builder.Services.Configure<FrontendOptions>(config.GetSection(FrontendOptions.Section));
+
+var proveedorSms = config.GetSection(SmsOptions.Section).Get<SmsOptions>()?.Proveedor ?? "Simulado";
+if (proveedorSms != "Simulado")
+    throw new InvalidOperationException($"Proveedor de SMS no soportado: {proveedorSms}. Use 'Simulado'.");
 
 var connectionString = config.GetConnectionString("Default");
 if (string.IsNullOrWhiteSpace(connectionString))
@@ -51,6 +62,25 @@ builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<PedidoService>();
 
+// Login de ERP: 2FA, recuperación de contraseña, bitácora y notificaciones.
+builder.Services.AddSingleton<Cifrador>();
+builder.Services.AddSingleton<TotpService>();
+builder.Services.AddScoped<SegundoFactorService>();
+builder.Services.AddScoped<BitacoraService>();
+builder.Services.AddScoped<RecuperacionService>();
+builder.Services.AddScoped<CuentaService>();
+builder.Services.AddScoped<PoliticaPassword>();
+builder.Services.AddHttpClient<IVerificadorPasswordFiltrada, HibpVerificador>(c =>
+{
+    c.BaseAddress = new Uri("https://api.pwnedpasswords.com/");
+    c.Timeout = TimeSpan.FromSeconds(3);
+    c.DefaultRequestHeaders.UserAgent.ParseAdd("PedidosPruebaTecnica/1.0");
+});
+builder.Services.AddSingleton<ColaNotificaciones>();
+builder.Services.AddSingleton<IEnviadorCorreo>(sp => sp.GetRequiredService<ColaNotificaciones>());
+builder.Services.AddSingleton<IEnviadorSms, SmsSimulado>();
+builder.Services.AddHostedService<ProcesadorNotificaciones>();
+
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
 
@@ -83,6 +113,23 @@ builder.Services
         };
         o.Events = new JwtBearerEvents
         {
+            // Un token emitido antes de cambiar la contraseña (o desactivar el 2FA) deja de ser válido:
+            // así "cerrar las demás sesiones" funciona aunque el JWT en sí no haya expirado.
+            OnTokenValidated = async ctx =>
+            {
+                var sub = ctx.Principal?.FindFirst(JwtClaims.UserId)?.Value;
+                var sv = ctx.Principal?.FindFirst(JwtClaims.VersionSesion)?.Value;
+                if (!int.TryParse(sub, out var id) || !int.TryParse(sv, out var version))
+                {
+                    ctx.Fail("Token sin versión de sesión.");
+                    return;
+                }
+                var db = ctx.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
+                var actual = await db.Usuarios.Where(u => u.Id == id).Select(u => (int?)u.VersionSesion)
+                    .FirstOrDefaultAsync(ctx.HttpContext.RequestAborted);
+                if (actual != version)
+                    ctx.Fail("La sesión fue cerrada.");
+            },
             OnChallenge = async ctx =>
             {
                 ctx.HandleResponse();
@@ -120,6 +167,8 @@ builder.Services.AddRateLimiter(o =>
     o.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(RateLimitPolicies.Global);
     o.AddPolicy(RateLimitPolicies.Login, RateLimitPolicies.PorIpLogin);
     o.AddPolicy(RateLimitPolicies.CrearPedido, RateLimitPolicies.PorUsuarioPedidos);
+    o.AddPolicy(RateLimitPolicies.SegundoFactor, RateLimitPolicies.PorIpSegundoFactor);
+    o.AddPolicy(RateLimitPolicies.Recuperacion, RateLimitPolicies.PorIpRecuperacion);
 });
 
 builder.Services.AddEndpointsApiExplorer();
