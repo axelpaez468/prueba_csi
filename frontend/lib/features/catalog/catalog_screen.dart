@@ -57,6 +57,8 @@ class _CatalogScreenState extends State<CatalogScreen> {
             SliverToBoxAdapter(
               child: PageBody(
                 child: PageHeader(
+                  area: 'Ventas',
+                  iconoArea: Icons.point_of_sale_outlined,
                   titulo: 'Catálogo de productos',
                   subtitulo: catalogo.items.isEmpty
                       ? 'Precios y existencias en tiempo real'

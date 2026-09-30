@@ -361,7 +361,7 @@ class Pills {
           _ => 'Manual',
         },
         color: origen == 'MANUAL' ? AppColors.primary : AppColors.textSecondary,
-        fondo: origen == 'MANUAL' ? const Color(0xFFE8EEF7) : AppColors.background,
+        fondo: origen == 'MANUAL' ? const Color(0xFFE3EAFB) : AppColors.background,
       );
 }
 

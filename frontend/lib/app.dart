@@ -41,6 +41,7 @@ class _PedidosAppState extends State<PedidosApp> {
   late final CatalogController _catalogo;
   late final CartController _carrito;
   late final PedidoRepository _pedidos;
+  final _navegacion = NavegacionController();
 
   SessionStatus? _ultimoEstado;
 
@@ -79,6 +80,7 @@ class _PedidosAppState extends State<PedidosApp> {
       _messengerKey.currentState?.clearSnackBars();
       _carrito.vaciar();
       _catalogo.limpiar();
+      _navegacion.reiniciar();
     }
   }
 
@@ -104,6 +106,7 @@ class _PedidosAppState extends State<PedidosApp> {
         Provider.value(value: ReporteRepository(_api)),
         Provider.value(value: ProductoRepository(_api)),
         ChangeNotifierProvider.value(value: _session),
+        ChangeNotifierProvider.value(value: _navegacion),
         ChangeNotifierProvider.value(value: _catalogo),
         ChangeNotifierProvider.value(value: _carrito),
       ],

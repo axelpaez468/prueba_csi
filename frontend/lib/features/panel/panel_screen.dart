@@ -32,6 +32,10 @@ class _PanelScreenState extends State<PanelScreen> with CargaDatos<PanelScreen, 
 
     return ModuloPage(
       esInicio: true,
+      encabezado: session == null
+          ? null
+          : _Bienvenida(nombre: nombre, rol: session.nombreRol, pendientes: p?.ordenesPendientes, alertas: p?.bajoMinimo.length,
+              cargando: cargando, alActualizar: recargar),
       titulo: 'Hola, $nombre',
       subtitulo: session == null ? null : '${session.nombreRol} · ${fechaLarga(DateTime.now())}',
       alRefrescar: recargar,
@@ -87,7 +91,7 @@ class _PanelScreenState extends State<PanelScreen> with CargaDatos<PanelScreen, 
                 : Column(children: [grafica, const SizedBox(height: 16), alertas]);
           }),
         ],
-        if (session != null) _AccesosRapidos(modulos: modulosDe(session).where((m) => m.titulo != 'Inicio').toList()),
+        if (session != null) _AccesosRapidos(modulos: modulosDe(session).where((m) => m.grupo != 'Inicio').toList()),
       ],
     );
   }
@@ -207,6 +211,95 @@ class _AccesosRapidos extends StatelessWidget {
           ],
         ),
       ],
+    );
+  }
+}
+
+/// Encabezado del panel: saludo, rol, fecha y avisos del día sobre el degradado de marca.
+class _Bienvenida extends StatelessWidget {
+  const _Bienvenida({
+    required this.nombre,
+    required this.rol,
+    required this.pendientes,
+    required this.alertas,
+    required this.cargando,
+    required this.alActualizar,
+  });
+
+  final String nombre;
+  final String rol;
+  final int? pendientes;
+  final int? alertas;
+  final bool cargando;
+  final Future<void> Function() alActualizar;
+
+  @override
+  Widget build(BuildContext context) {
+    final compacto = Breakpoints.esCompacto(context);
+    final margen = compacto ? 16.0 : 24.0;
+    final hora = DateTime.now().hour;
+    final saludo = hora < 12 ? 'Buenos días' : hora < 19 ? 'Buenas tardes' : 'Buenas noches';
+
+    Widget chip(IconData icono, String texto) => Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(99),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(icono, size: 15, color: Colors.white),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(texto,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500)),
+            ),
+          ]),
+        );
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(margen, margen, margen, 20),
+      child: Container(
+        padding: EdgeInsets.all(compacto ? 20 : 28),
+        decoration: BoxDecoration(
+          gradient: AppColors.degradado,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: const [BoxShadow(color: Color(0x332450C8), blurRadius: 24, offset: Offset(0, 10))],
+        ),
+        child: Stack(children: [
+          // Figura decorativa sutil a la derecha.
+          Positioned(
+            right: -20,
+            top: -30,
+            child: Icon(Icons.hub_outlined, size: compacto ? 120 : 180, color: Colors.white.withValues(alpha: 0.06)),
+          ),
+          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(fechaLarga(DateTime.now()).toUpperCase(),
+                style: const TextStyle(color: Color(0xFFB9C8F5), fontSize: 12, letterSpacing: 1.2, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            Text('$saludo, $nombre',
+                style: TextStyle(color: Colors.white, fontSize: compacto ? 24 : 30, fontWeight: FontWeight.w800, letterSpacing: -0.5)),
+            const SizedBox(height: 4),
+            Text('Este es el resumen de tu negocio · $rol',
+                style: const TextStyle(color: Color(0xFFD5DEF8), fontSize: 14)),
+            const SizedBox(height: 18),
+            Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+              if (pendientes != null)
+                chip(Icons.local_shipping_outlined,
+                    '$pendientes ${pendientes == 1 ? 'orden de compra pendiente' : 'órdenes de compra pendientes'}'),
+              if (alertas != null)
+                chip(Icons.warning_amber_rounded, '$alertas ${alertas == 1 ? 'producto por reabastecer' : 'productos por reabastecer'}'),
+              TextButton.icon(
+                style: TextButton.styleFrom(foregroundColor: Colors.white),
+                onPressed: cargando ? null : alActualizar,
+                icon: const Icon(Icons.refresh, size: 18),
+                label: const Text('Actualizar'),
+              ),
+            ]),
+          ]),
+        ]),
+      ),
     );
   }
 }

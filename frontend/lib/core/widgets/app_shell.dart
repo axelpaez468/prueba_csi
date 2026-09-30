@@ -79,11 +79,15 @@ class PageBody extends StatelessWidget {
 
 /// Encabezado de página: título, subtítulo y acciones opcionales a la derecha.
 class PageHeader extends StatelessWidget {
-  const PageHeader({super.key, required this.titulo, this.subtitulo, this.acciones = const []});
+  const PageHeader({super.key, required this.titulo, this.subtitulo, this.acciones = const [], this.area, this.iconoArea});
 
   final String titulo;
   final String? subtitulo;
   final List<Widget> acciones;
+
+  /// Área del ERP a la que pertenece la pantalla ("Ventas", "Contabilidad"...), sobre el título.
+  final String? area;
+  final IconData? iconoArea;
 
   @override
   Widget build(BuildContext context) {
@@ -92,7 +96,16 @@ class PageHeader extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(titulo, style: theme.textTheme.headlineSmall),
+        if (area != null) ...[
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            if (iconoArea != null) ...[Icon(iconoArea, size: 14, color: AppColors.primary), const SizedBox(width: 6)],
+            Text(area!.toUpperCase(),
+                style: theme.textTheme.labelSmall?.copyWith(
+                    color: AppColors.primary, letterSpacing: 1.2, fontWeight: FontWeight.w700)),
+          ]),
+          const SizedBox(height: 6),
+        ],
+        Text(titulo, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800, letterSpacing: -0.5)),
         if (subtitulo != null) ...[
           const SizedBox(height: 4),
           Text(subtitulo!, style: theme.textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary)),
@@ -267,7 +280,7 @@ class EmptyState extends StatelessWidget {
             Container(
               width: 72,
               height: 72,
-              decoration: const BoxDecoration(color: Color(0xFFE8EDF4), shape: BoxShape.circle),
+              decoration: const BoxDecoration(color: Color(0xFFE3EAFB), shape: BoxShape.circle),
               child: Icon(icono, size: 34, color: AppColors.primary),
             ),
             const SizedBox(height: 16),

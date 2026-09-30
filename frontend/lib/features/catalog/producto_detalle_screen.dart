@@ -68,7 +68,7 @@ class _ProductoDetalleScreenState extends State<ProductoDetalleScreen>
       children: [
         Wrap(spacing: 8, runSpacing: 6, children: [
           if (p.categoria != null)
-            StatusPill(texto: p.categoria!, color: AppColors.primary, fondo: const Color(0xFFE8EEF7)),
+            StatusPill(texto: p.categoria!, color: AppColors.primary, fondo: const Color(0xFFE3EAFB)),
           StatusPill(texto: p.codigo, color: AppColors.textSecondary, fondo: AppColors.background),
         ]),
         const SizedBox(height: 10),

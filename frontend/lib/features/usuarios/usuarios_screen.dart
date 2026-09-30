@@ -304,7 +304,7 @@ class _FilaUsuario extends StatelessWidget {
     ]);
 
     final rol = u.esAdmin
-        ? const StatusPill(texto: 'Administrador', color: AppColors.primary, fondo: Color(0xFFE8EEF7))
+        ? const StatusPill(texto: 'Administrador', color: AppColors.primary, fondo: Color(0xFFE3EAFB))
         : StatusPill(texto: Roles.nombre(u.rol), color: AppColors.textSecondary, fondo: AppColors.background);
     final estado = !u.activo
         ? const StatusPill(texto: 'Inactivo', color: AppColors.danger, fondo: AppColors.dangerBg)

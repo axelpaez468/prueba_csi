@@ -7,45 +7,273 @@ import '../../core/widgets/app_shell.dart';
 import '../auth/session_controller.dart';
 import '../cart/cart_controller.dart';
 import '../cart/cart_screen.dart';
-import '../cuenta/bitacora_screen.dart';
 import '../cuenta/seguridad_screen.dart';
-import '../usuarios/usuarios_screen.dart';
 import 'modulos.dart';
 
-/// Barra superior común: logo, acceso al carrito y menú del usuario.
+/// Header del ERP: barra de navegación oscura con las áreas del sistema (según el rol), carrito y cuenta.
+/// En pantallas anchas las áreas van en la barra, cada una con su submenú; en tablet y celular se abren
+/// desde el botón de menú como un panel lateral.
 class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
   const AppTopBar({super.key, this.mostrarCarrito = true, this.leading});
 
   final bool mostrarCarrito;
   final Widget? leading;
 
+  static const alto = 64.0;
+
+  /// Desde este ancho las áreas caben en la barra.
+  static const anchoNavegacion = 1240.0;
+
   @override
-  Size get preferredSize => const Size.fromHeight(64);
+  Size get preferredSize => const Size.fromHeight(alto);
 
   @override
   Widget build(BuildContext context) {
     final ancho = MediaQuery.sizeOf(context).width;
     final compacto = ancho < 640;
+    final enBarra = ancho >= anchoNavegacion;
+    final session = context.watch<SessionController>().session;
+    final areas = session == null ? const <(Grupo, List<Modulo>)>[] : gruposDe(session);
+    final vende = session?.puedeVender ?? false;
 
-    return AppBar(
-      toolbarHeight: 64,
-      automaticallyImplyLeading: false,
-      titleSpacing: compacto ? 12 : 20,
-      title: Row(
-        children: [
-          if (leading != null) ...[leading!, const SizedBox(width: 8)],
-          Flexible(child: BrandLogo(soloIcono: ancho < 400)),
-        ],
+    return Material(
+      color: AppColors.navbar,
+      elevation: 3,
+      shadowColor: const Color(0x400B1426),
+      child: Container(
+        height: alto,
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(colors: [AppColors.navbar, AppColors.navbarClaro]),
+        ),
+        child: SafeArea(
+          bottom: false,
+          child: IconTheme(
+            data: const IconThemeData(color: Colors.white),
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: compacto ? 8 : 16),
+              child: Row(
+                children: [
+                  ?leading,
+                  if (!enBarra && areas.isNotEmpty)
+                    IconButton(
+                      tooltip: 'Menú',
+                      onPressed: () => _abrirPanel(context, areas),
+                      icon: const Icon(Icons.menu),
+                    ),
+                  const SizedBox(width: 4),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(10),
+                    onTap: session == null ? null : () => abrirModulo(context, inicioModuloDe(session)),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                      child: BrandLogo(claro: true, soloIcono: ancho < 400),
+                    ),
+                  ),
+                  const SizedBox(width: 20),
+                  if (enBarra)
+                    // Si no caben todas las áreas (textos largos, zoom del navegador), la barra se desplaza.
+                    Expanded(
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(children: [
+                          for (final (grupo, lista) in areas) _ItemArea(grupo: grupo, modulos: lista),
+                        ]),
+                      ),
+                    )
+                  else
+                    const Spacer(),
+                  if (mostrarCarrito && vende) _BotonCarrito(compacto: compacto),
+                  const SizedBox(width: 8),
+                  _MenuUsuario(compacto: compacto),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
-      actions: [
-        _MenuModulos(compacto: compacto),
+    );
+  }
+
+  void _abrirPanel(BuildContext context, List<(Grupo, List<Modulo>)> areas) {
+    showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Cerrar menú',
+      barrierColor: Colors.black45,
+      transitionDuration: const Duration(milliseconds: 220),
+      pageBuilder: (ctx, _, _) => _PanelNavegacion(areas: areas, alElegir: (m) {
+        Navigator.of(ctx).pop();
+        abrirModulo(context, m);
+      }),
+      transitionBuilder: (_, animacion, _, hijo) => SlideTransition(
+        position: Tween(begin: const Offset(-1, 0), end: Offset.zero)
+            .animate(CurvedAnimation(parent: animacion, curve: Curves.easeOutCubic)),
+        child: hijo,
+      ),
+    );
+  }
+}
+
+/// Área en la barra (Ventas, Inventario...). Con un solo módulo abre directo; si no, despliega su submenú.
+class _ItemArea extends StatelessWidget {
+  const _ItemArea({required this.grupo, required this.modulos});
+
+  final Grupo grupo;
+  final List<Modulo> modulos;
+
+  @override
+  Widget build(BuildContext context) {
+    final activo = moduloActual(context)?.grupo == grupo.nombre;
+    final contenido = AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      height: AppTopBar.alto,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      decoration: BoxDecoration(
+        color: activo ? Colors.white.withValues(alpha: 0.08) : null,
+        border: Border(bottom: BorderSide(color: activo ? const Color(0xFF7FA2FF) : Colors.transparent, width: 3)),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(grupo.icono, size: 18, color: activo ? Colors.white : AppColors.navbarTexto),
         const SizedBox(width: 8),
-        if (mostrarCarrito && (context.watch<SessionController>().session?.puedeVender ?? false))
-          _BotonCarrito(compacto: compacto),
-        const SizedBox(width: 8),
-        _MenuUsuario(compacto: compacto),
-        SizedBox(width: compacto ? 8 : 16),
+        Text(grupo.nombre,
+            style: TextStyle(
+                color: activo ? Colors.white : AppColors.navbarTexto,
+                fontWeight: activo ? FontWeight.w700 : FontWeight.w500,
+                fontSize: 14)),
+        if (modulos.length > 1) ...[
+          const SizedBox(width: 2),
+          Icon(Icons.expand_more, size: 16, color: activo ? Colors.white : AppColors.navbarTexto),
+        ],
+      ]),
+    );
+
+    if (modulos.length == 1) {
+      return InkWell(onTap: () => abrirModulo(context, modulos.first), child: contenido);
+    }
+    final actual = moduloActual(context);
+    return PopupMenuButton<Modulo>(
+      tooltip: grupo.nombre,
+      position: PopupMenuPosition.under,
+      offset: const Offset(0, 2),
+      onSelected: (m) => abrirModulo(context, m),
+      itemBuilder: (_) => [
+        for (final m in modulos)
+          PopupMenuItem<Modulo>(
+            value: m,
+            height: 56,
+            child: _FilaModulo(modulo: m, activo: actual == m),
+          ),
       ],
+      child: contenido,
+    );
+  }
+}
+
+class _FilaModulo extends StatelessWidget {
+  const _FilaModulo({required this.modulo, required this.activo, this.oscuro = false});
+
+  final Modulo modulo;
+  final bool activo;
+  final bool oscuro;
+
+  @override
+  Widget build(BuildContext context) {
+    final titulo = oscuro ? Colors.white : AppColors.textPrimary;
+    final detalle = oscuro ? AppColors.navbarTexto : AppColors.textSecondary;
+    // En el submenú de la barra, ancho fijo; en el panel lateral, el que haya.
+    return SizedBox(
+      width: oscuro ? null : 260,
+      child: Row(children: [
+        Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: activo
+                ? AppColors.primary
+                : oscuro
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : const Color(0xFFE3EAFB),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(modulo.icono, size: 18, color: activo || oscuro ? Colors.white : AppColors.primary),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(modulo.titulo, style: TextStyle(fontWeight: FontWeight.w600, color: titulo)),
+            Text(modulo.descripcion,
+                maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: detalle)),
+          ]),
+        ),
+      ]),
+    );
+  }
+}
+
+/// Menú lateral (tablet y celular): todas las áreas y módulos del rol.
+class _PanelNavegacion extends StatelessWidget {
+  const _PanelNavegacion({required this.areas, required this.alElegir});
+
+  final List<(Grupo, List<Modulo>)> areas;
+  final ValueChanged<Modulo> alElegir;
+
+  @override
+  Widget build(BuildContext context) {
+    final ancho = MediaQuery.sizeOf(context).width;
+    final actual = moduloActual(context);
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Material(
+        color: AppColors.navbar,
+        child: SizedBox(
+          width: ancho < 400 ? ancho * 0.86 : 320,
+          height: double.infinity,
+          child: SafeArea(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+              children: [
+                Row(children: [
+                  const Expanded(child: Align(alignment: Alignment.centerLeft, child: BrandLogo(claro: true))),
+                  IconButton(
+                    tooltip: 'Cerrar',
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close, color: Colors.white),
+                  ),
+                ]),
+                const SizedBox(height: 12),
+                for (final (grupo, lista) in areas) ...[
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(4, 16, 4, 8),
+                    child: Row(children: [
+                      Icon(grupo.icono, size: 16, color: AppColors.navbarTexto),
+                      const SizedBox(width: 8),
+                      Text(grupo.nombre.toUpperCase(),
+                          style: const TextStyle(
+                              color: AppColors.navbarTexto, fontSize: 11, letterSpacing: 1, fontWeight: FontWeight.w700)),
+                    ]),
+                  ),
+                  for (final m in lista)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Material(
+                        color: actual == m ? Colors.white.withValues(alpha: 0.1) : Colors.transparent,
+                        borderRadius: BorderRadius.circular(12),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(12),
+                          onTap: () => alElegir(m),
+                          child: Padding(
+                            padding: const EdgeInsets.all(8),
+                            child: _FilaModulo(modulo: m, activo: actual == m, oscuro: true),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -61,13 +289,21 @@ class _BotonCarrito extends StatelessWidget {
     final icono = Badge(
       isLabelVisible: unidades > 0,
       label: Text('$unidades'),
-      child: const Icon(Icons.shopping_cart_outlined),
+      child: const Icon(Icons.shopping_cart_outlined, color: Colors.white),
     );
     void abrir() => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CartScreen()));
 
     return compacto
         ? IconButton(tooltip: 'Carrito', onPressed: abrir, icon: icono)
-        : OutlinedButton.icon(onPressed: abrir, icon: icono, label: const Text('Carrito'));
+        : OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.white,
+              side: BorderSide(color: Colors.white.withValues(alpha: 0.3)),
+            ),
+            onPressed: abrir,
+            icon: icono,
+            label: const Text('Carrito'),
+          );
   }
 }
 
@@ -87,15 +323,11 @@ class _MenuUsuario extends StatelessWidget {
       tooltip: 'Cuenta',
       position: PopupMenuPosition.under,
       onSelected: (v) {
-        final navigator = Navigator.of(context);
         switch (v) {
           case 'seguridad':
-            navigator.push(MaterialPageRoute(builder: (_) => const SeguridadScreen()));
-          case 'usuarios':
-            navigator.push(MaterialPageRoute(builder: (_) => const UsuariosScreen()));
-          case 'bitacora':
-            navigator.push(MaterialPageRoute(builder: (_) => const BitacoraScreen()));
+            Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SeguridadScreen()));
           case 'salir':
+            context.read<NavegacionController?>()?.reiniciar();
             context.read<SessionController>().logout();
         }
       },
@@ -106,7 +338,9 @@ class _MenuUsuario extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(session.username, style: theme.textTheme.titleSmall?.copyWith(color: AppColors.textPrimary)),
-              Text(session.nombreRol, style: theme.textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
+              Text(session.email, style: theme.textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
+              const SizedBox(height: 6),
+              StatusPill(texto: session.nombreRol, color: AppColors.primary, fondo: const Color(0xFFE3EAFB)),
             ],
           ),
         ),
@@ -115,16 +349,6 @@ class _MenuUsuario extends StatelessWidget {
           value: 'seguridad',
           child: Row(children: [Icon(Icons.shield_outlined, size: 18), SizedBox(width: 10), Text('Seguridad de la cuenta')]),
         ),
-        if (session.esAdmin)
-          const PopupMenuItem<String>(
-            value: 'usuarios',
-            child: Row(children: [Icon(Icons.group_outlined, size: 18), SizedBox(width: 10), Text('Usuarios')]),
-          ),
-        if (session.esAdmin)
-          const PopupMenuItem<String>(
-            value: 'bitacora',
-            child: Row(children: [Icon(Icons.manage_search, size: 18), SizedBox(width: 10), Text('Bitácora de accesos')]),
-          ),
         const PopupMenuDivider(),
         const PopupMenuItem<String>(
           value: 'salir',
@@ -136,10 +360,14 @@ class _MenuUsuario extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            CircleAvatar(
-              radius: 17,
-              backgroundColor: AppColors.primary,
-              child: Text(inicial, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+            Container(
+              padding: const EdgeInsets.all(2),
+              decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: const Color(0xFF7FA2FF), width: 2)),
+              child: CircleAvatar(
+                radius: 15,
+                backgroundColor: AppColors.primary,
+                child: Text(inicial, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+              ),
             ),
             if (!compacto) ...[
               const SizedBox(width: 10),
@@ -147,67 +375,16 @@ class _MenuUsuario extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(session.username, style: theme.textTheme.labelLarge),
-                  Text(session.nombreRol, style: theme.textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
+                  Text(session.username,
+                      style: theme.textTheme.labelLarge?.copyWith(color: Colors.white, fontWeight: FontWeight.w600)),
+                  Text(session.nombreRol, style: theme.textTheme.bodySmall?.copyWith(color: AppColors.navbarTexto)),
                 ],
               ),
-              const Icon(Icons.expand_more, color: AppColors.textSecondary),
+              const Icon(Icons.expand_more, color: AppColors.navbarTexto),
             ],
           ],
         ),
       ),
-    );
-  }
-}
-
-/// Acceso a los módulos que el rol del usuario puede usar, agrupados por área.
-class _MenuModulos extends StatelessWidget {
-  const _MenuModulos({required this.compacto});
-
-  final bool compacto;
-
-  @override
-  Widget build(BuildContext context) {
-    final session = context.watch<SessionController>().session;
-    if (session == null) return const SizedBox.shrink();
-    final disponibles = modulosDe(session);
-    if (disponibles.isEmpty) return const SizedBox.shrink();
-
-    final items = <PopupMenuEntry<Modulo>>[];
-    String? grupo;
-    for (final m in disponibles) {
-      if (m.grupo != grupo) {
-        if (grupo != null) items.add(const PopupMenuDivider());
-        grupo = m.grupo;
-        items.add(PopupMenuItem<Modulo>(
-          enabled: false,
-          height: 28,
-          child: Text(m.grupo.toUpperCase(),
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.6, color: AppColors.textSecondary)),
-        ));
-      }
-      items.add(PopupMenuItem<Modulo>(
-        value: m,
-        child: Row(children: [Icon(m.icono, size: 18), const SizedBox(width: 10), Text(m.titulo)]),
-      ));
-    }
-
-    return PopupMenuButton<Modulo>(
-      tooltip: 'Módulos',
-      position: PopupMenuPosition.under,
-      onSelected: (m) => abrirModulo(context, m),
-      itemBuilder: (_) => items,
-      child: compacto
-          ? const Padding(padding: EdgeInsets.all(8), child: Icon(Icons.apps))
-          : const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                Icon(Icons.apps, size: 20),
-                SizedBox(width: 6),
-                Text('Módulos', style: TextStyle(fontWeight: FontWeight.w600)),
-                Icon(Icons.expand_more, size: 18),
-              ]),
-            ),
     );
   }
 }

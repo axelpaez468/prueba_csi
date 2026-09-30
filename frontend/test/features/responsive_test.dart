@@ -38,6 +38,7 @@ import 'package:pedidos_app/features/cuenta/seguridad_screen.dart';
 import 'package:pedidos_app/features/inventario/inventario_dialogs.dart';
 import 'package:pedidos_app/features/inventario/inventario_screen.dart';
 import 'package:pedidos_app/features/panel/panel_screen.dart';
+import 'package:pedidos_app/features/shell/modulos.dart';
 import 'package:pedidos_app/features/productos/productos_screen.dart';
 import 'package:pedidos_app/features/order/order_confirmation_screen.dart';
 import 'package:pedidos_app/features/usuarios/usuario_form_dialog.dart';
@@ -341,6 +342,7 @@ Future<void> _montar(WidgetTester tester, Size tamano, Widget pantalla, {_Sesion
       Provider.value(value: ReporteRepository(api)),
       Provider.value(value: ProductoRepository(api)),
       ChangeNotifierProvider.value(value: session),
+      ChangeNotifierProvider(create: (_) => NavegacionController()),
       ChangeNotifierProvider.value(value: catalogo),
       ChangeNotifierProvider.value(value: carrito),
     ],
@@ -452,6 +454,23 @@ void main() {
       });
 
       // ---------- ERP ----------
+
+      testWidgets('barra de navegación', (tester) async {
+        await _montar(tester, tamano, const PanelScreen());
+        if (tamano.width >= 1240) {
+          // Escritorio: las áreas están en la barra y cada una despliega sus módulos.
+          expect(find.byTooltip('Contabilidad'), findsOneWidget);
+          await tester.tap(find.byTooltip('Ventas'));
+          await tester.pumpAndSettle();
+          expect(find.byType(PopupMenuItem<Modulo>), findsNWidgets(4));
+        } else {
+          // Tablet y celular: botón de menú con un panel lateral agrupado por área.
+          await tester.tap(find.byTooltip('Menú'));
+          await tester.pumpAndSettle();
+          expect(find.text('VENTAS'), findsOneWidget);
+          expect(find.text('Reportes de ventas'), findsWidgets);
+        }
+      });
 
       testWidgets('panel de inicio', (tester) async {
         await _montar(tester, tamano, const PanelScreen());

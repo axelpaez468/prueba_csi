@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/security/permisos.dart';
 import '../../core/security/session.dart';
+import '../auth/session_controller.dart';
 import '../catalog/catalog_screen.dart';
 import '../clientes/clientes_screen.dart';
 import '../compras/ordenes_screen.dart';
@@ -29,8 +31,25 @@ class Modulo {
   final bool Function(Session s) visible;
 }
 
+/// Área del ERP en la barra de navegación, en el orden en que se muestran.
+class Grupo {
+  const Grupo(this.nombre, this.icono);
+
+  final String nombre;
+  final IconData icono;
+}
+
+const grupos = <Grupo>[
+  Grupo('Inicio', Icons.space_dashboard_outlined),
+  Grupo('Ventas', Icons.point_of_sale_outlined),
+  Grupo('Inventario', Icons.inventory_2_outlined),
+  Grupo('Compras', Icons.local_shipping_outlined),
+  Grupo('Contabilidad', Icons.account_balance_outlined),
+  Grupo('Administración', Icons.admin_panel_settings_outlined),
+];
+
 final modulos = <Modulo>[
-  Modulo('Inicio', 'Indicadores del negocio', Icons.dashboard_outlined, 'General', () => const PanelScreen(), (s) => s.vePanel),
+  Modulo('Panel', 'Indicadores del negocio', Icons.space_dashboard_outlined, 'Inicio', () => const PanelScreen(), (s) => s.vePanel),
   Modulo('Catálogo', 'Productos para vender', Icons.storefront_outlined, 'Ventas', () => const CatalogScreen(), (s) => s.veCatalogo),
   Modulo('Ventas', 'Facturas emitidas', Icons.receipt_long_outlined, 'Ventas', () => const VentasScreen(), (s) => s.consultaVentas),
   Modulo('Reportes de ventas', 'Por día, producto, vendedor y cliente', Icons.insights_outlined, 'Ventas',
@@ -39,7 +58,7 @@ final modulos = <Modulo>[
       (s) => s.gestionaClientes),
   Modulo('Productos', 'Alta, ficha, fotos y baja', Icons.category_outlined, 'Inventario', () => const ProductosScreen(),
       (s) => s.gestionaInventario),
-  Modulo('Inventario', 'Existencias, costos y kardex', Icons.inventory_2_outlined, 'Inventario', () => const InventarioScreen(),
+  Modulo('Existencias', 'Costos, kardex y ajustes', Icons.inventory_2_outlined, 'Inventario', () => const InventarioScreen(),
       (s) => s.consultaInventario),
   Modulo('Órdenes de compra', 'Pedidos a proveedores y recepción', Icons.local_shipping_outlined, 'Compras',
       () => const OrdenesScreen(), (s) => s.consultaCompras),
@@ -59,8 +78,58 @@ final modulos = <Modulo>[
 
 List<Modulo> modulosDe(Session s) => modulos.where((m) => m.visible(s)).toList();
 
+/// Áreas con al menos un módulo visible para el rol, con sus módulos.
+List<(Grupo, List<Modulo>)> gruposDe(Session s) {
+  final visibles = modulosDe(s);
+  return [
+    for (final g in grupos)
+      if (visibles.any((m) => m.grupo == g.nombre)) (g, visibles.where((m) => m.grupo == g.nombre).toList()),
+  ];
+}
+
 /// Pantalla de inicio según el rol.
 Widget inicioDe(Session s) => s.vePanel ? const PanelScreen() : const CatalogScreen();
 
-void abrirModulo(BuildContext context, Modulo m) =>
-    Navigator.of(context).push(MaterialPageRoute(builder: (_) => m.pantalla()));
+/// Módulo de inicio del rol (el que se resalta cuando se está en la primera pantalla).
+Modulo inicioModuloDe(Session s) => modulos.firstWhere((m) => m.titulo == (s.vePanel ? 'Panel' : 'Catálogo'));
+
+/// Qué módulo está abierto, para resaltarlo en la barra de navegación y mostrar el área en el encabezado.
+class NavegacionController extends ChangeNotifier {
+  Modulo? _actual;
+
+  /// null: la pantalla de inicio del rol.
+  Modulo? get actual => _actual;
+
+  void _cambiar(Modulo? m) {
+    if (_actual == m) return;
+    _actual = m;
+    notifyListeners();
+  }
+
+  void reiniciar() => _cambiar(null);
+}
+
+/// Módulo que se considera abierto: el elegido en la barra o, si no hay, el de inicio del rol.
+Modulo? moduloActual(BuildContext context) {
+  final actual = context.watch<NavegacionController?>()?.actual;
+  final session = context.watch<SessionController?>()?.session;
+  return actual ?? (session == null ? null : inicioModuloDe(session));
+}
+
+/// Abre un módulo desde la barra de navegación. Funciona como pestañas: reemplaza lo que estaba abierto
+/// (salvo la pantalla de inicio), para que "volver" siempre lleve al inicio y no se apilen pantallas.
+void abrirModulo(BuildContext context, Modulo m) {
+  final nav = context.read<NavegacionController?>();
+  final session = context.read<SessionController?>()?.session;
+  final navigator = Navigator.of(context);
+  navigator.popUntil((r) => r.isFirst);
+  if (session != null && m.titulo == inicioModuloDe(session).titulo) {
+    nav?._cambiar(null);
+    return;
+  }
+  nav?._cambiar(m);
+  navigator.push(MaterialPageRoute(builder: (_) => m.pantalla())).then((_) {
+    // Al volver al inicio con "atrás", se quita el resaltado.
+    if (nav?._actual == m) nav?._cambiar(null);
+  });
+}

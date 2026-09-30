@@ -87,7 +87,7 @@ class _ClientesScreenState extends State<ClientesScreen> with CargaDatos<Cliente
               ]),
               textoSecundario(context, contactoDe(c.telefono, c.email), lineas: 2),
               c.esConsumidorFinal
-                  ? const StatusPill(texto: 'Del sistema', color: AppColors.primary, fondo: Color(0xFFE8EEF7))
+                  ? const StatusPill(texto: 'Del sistema', color: AppColors.primary, fondo: Color(0xFFE3EAFB))
                   : Pills.activo(c.activo),
             ];
           },

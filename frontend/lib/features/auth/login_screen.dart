@@ -81,10 +81,13 @@ class _PanelMarca extends StatelessWidget {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
+            // Mismo tono que la barra de navegación del ERP, con un toque del azul de marca.
             colors: [
-              AppColors.primary.withValues(alpha: 0.74),
-              AppColors.primaryDark.withValues(alpha: 0.90),
+              AppColors.navbar.withValues(alpha: 0.88),
+              AppColors.primaryDark.withValues(alpha: 0.80),
+              AppColors.primary.withValues(alpha: 0.62),
             ],
+            stops: const [0, 0.6, 1],
           ),
         ),
         child: _cuerpo(theme, blanco70),

@@ -37,7 +37,7 @@ class ProductoImagen extends StatelessWidget {
   Widget build(BuildContext context) {
     final (asset, icono) = _resolver(producto.nombre);
     final respaldo = ColoredBox(
-      color: const Color(0xFFE8EEF7),
+      color: const Color(0xFFE3EAFB),
       child: Center(child: Icon(icono, size: tamanoIcono, color: AppColors.primary.withValues(alpha: 0.75))),
     );
     final sinStock = !producto.disponible;
@@ -59,7 +59,7 @@ class ProductoImagen extends StatelessWidget {
       // Sin stock: la foto se ve en escala de grises.
       color: sinStock ? Colors.grey : null,
       colorBlendMode: sinStock ? BlendMode.saturation : null,
-      loadingBuilder: (_, child, progreso) => progreso == null ? child : ColoredBox(color: const Color(0xFFE8EEF7), child: child),
+      loadingBuilder: (_, child, progreso) => progreso == null ? child : ColoredBox(color: const Color(0xFFE3EAFB), child: child),
       errorBuilder: (_, _, _) => local,
     );
   }

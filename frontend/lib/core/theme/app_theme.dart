@@ -4,14 +4,27 @@ import 'package:flutter/material.dart';
 class AppColors {
   const AppColors._();
 
-  static const primary = Color(0xFF1E3A5F); // azul marino corporativo
-  static const primaryDark = Color(0xFF14283F);
-  static const accent = Color(0xFF2E7D6B); // verde petróleo para acciones positivas
-  static const background = Color(0xFFF4F6F9);
+  static const primary = Color(0xFF2450C8); // azul corporativo
+  static const primaryDark = Color(0xFF16307F);
+  static const accent = Color(0xFF0E9F6E); // esmeralda para acciones positivas
+  static const background = Color(0xFFF1F4F9);
   static const surface = Colors.white;
-  static const border = Color(0xFFE2E6EC);
-  static const textPrimary = Color(0xFF1B2430);
-  static const textSecondary = Color(0xFF5B6675);
+  static const border = Color(0xFFE3E8EF);
+  static const textPrimary = Color(0xFF0F172A);
+  static const textSecondary = Color(0xFF64748B);
+
+  // Barra de navegación (header oscuro del ERP).
+  static const navbar = Color(0xFF0B1426);
+  static const navbarClaro = Color(0xFF16243F);
+  static const navbarTexto = Color(0xFFCBD5E1);
+
+  /// Degradado de marca (encabezado del panel, destacados).
+  static const degradado = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFF0B1426), Color(0xFF16307F), Color(0xFF2450C8)],
+    stops: [0, 0.55, 1],
+  );
 
   static const success = Color(0xFF1E8E5A);
   static const successBg = Color(0xFFE6F4EC);
@@ -59,13 +72,34 @@ class AppTheme {
       ),
       cardTheme: CardThemeData(
         color: AppColors.surface,
-        elevation: 0,
+        // Sombra suave y borde tenue: tarjetas "flotantes" sobre el fondo gris azulado.
+        elevation: 1.5,
+        shadowColor: const Color(0x1A0F172A),
         margin: EdgeInsets.zero,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(16),
           side: const BorderSide(color: AppColors.border),
         ),
+      ),
+      popupMenuTheme: PopupMenuThemeData(
+        color: AppColors.surface,
+        surfaceTintColor: Colors.transparent,
+        elevation: 8,
+        shadowColor: const Color(0x330F172A),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: const BorderSide(color: AppColors.border)),
+      ),
+      segmentedButtonTheme: SegmentedButtonThemeData(
+        style: SegmentedButton.styleFrom(
+          selectedBackgroundColor: const Color(0xFFE3EAFB),
+          selectedForegroundColor: AppColors.primaryDark,
+          side: const BorderSide(color: AppColors.border),
+        ),
+      ),
+      chipTheme: ChipThemeData(
+        side: const BorderSide(color: AppColors.border),
+        selectedColor: const Color(0xFFE3EAFB),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(99)),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
