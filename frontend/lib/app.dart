@@ -98,8 +98,9 @@ class _PedidosAppState extends State<PedidosApp> {
         theme: AppTheme.light(),
         home: Consumer<SessionController>(
           builder: (_, session, _) {
+            // El enlace del correo abre siempre esta pantalla, aunque haya una sesión abierta en el navegador.
             final token = _tokenRestablecer;
-            if (token != null && session.status != SessionStatus.authenticated) {
+            if (token != null) {
               return RestablecerPasswordScreen(token: token, alTerminar: () => setState(() => _tokenRestablecer = null));
             }
             return switch (session.status) {
