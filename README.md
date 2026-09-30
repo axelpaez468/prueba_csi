@@ -136,7 +136,10 @@ for i in $(seq 1 10); do curl -s -o /dev/null -w "%{http_code}\n" -X POST http:/
 | GET | `/api/admin/bitacora` | ADMIN | Últimos 100 eventos de seguridad de todos los usuarios |
 | GET/POST/PUT/DELETE | `/api/admin/usuarios[/{id}]` | ADMIN | Listar (`?buscar=`), crear (envía invitación), editar, `/activar`, `/desactivar`, `/invitacion`, eliminar (solo sin pedidos) · 400 validación · 403 no admin · 404 |
 | GET | `/api/productos` | Autenticado | 200 `[{ id, codigo, nombre, precio, stock, marca, categoria }]` (solo productos activos) · 401 |
-| GET | `/api/productos/{id}` | Autenticado | Ficha del producto: descripción, garantía y especificaciones técnicas · 404 |
+| GET | `/api/productos/{id}` | Autenticado | Ficha del producto: descripción, garantía, especificaciones e ids de sus fotos · 404 |
+| GET | `/api/productos/{id}/imagenes/{imagenId}` | **Público** | La foto (JPG/PNG/WebP), con caché de 7 días · 404 |
+| DELETE | `/api/inventario/productos/{id}` | BODEGA, ADMIN | 204 · 400 si tiene ventas, compras o movimientos (hay que desactivarlo) |
+| POST/DELETE | `/api/inventario/productos/{id}/imagenes[/{imagenId}]` | BODEGA, ADMIN | Subir (multipart, campo `archivo`, hasta 2 MB y 5 por producto) o eliminar una foto; `POST .../{imagenId}/principal` la pone primera |
 | POST | `/api/pedidos` | VENDEDOR | 201 `{ numero, fecha, usuarioId, total, lineas[], serie, autorizacion, clienteNit, baseImponible, iva, ... }` · 400 · 401 · 403. Acepta `clienteId` (sin él: CF) y `formaPago` (`EFECTIVO`, `TARJETA`, `TRANSFERENCIA`) |
 | GET | `/api/pedidos?desde=&hasta=` | VENDEDOR (las suyas), ADMIN, CONTADOR | Facturas del rango (por defecto, el mes) |
 | GET | `/api/pedidos/{id}` | Dueño, ADMIN o CONTADOR | 200 · 401 · 404 |
@@ -159,8 +162,8 @@ Todos los errores tienen el mismo formato: `{ "error": "mensaje legible" }`.
 ### Pruebas automatizadas
 
 ```bash
-cd backend && dotnet test      # 140 pruebas (1 se omite si no hay SQL Server; ver abajo)
-cd frontend && flutter test    # 180 pruebas
+cd backend && dotnet test      # 148 pruebas (1 se omite si no hay SQL Server; ver abajo)
+cd frontend && flutter test    # 190 pruebas
 ```
 
 - **Backend:** usa SQLite en memoria, que a diferencia del proveedor InMemory de EF soporta transacciones reales, `ExecuteUpdate` y *check constraints*. Cubre: precio/total calculados en el servidor aunque el cliente los envíe; descuento de stock; rollback completo si una línea falla; última unidad vendida una sola vez; cantidad ≤ 0; producto inexistente; producto duplicado; pedido vacío; pedido ajeno no visible; y login válido/inválido.
@@ -287,6 +290,7 @@ Cada rol ve solo sus módulos (menú **Módulos** en la barra superior). El vend
 | **Ventas** | Venta de contado a un cliente (NIT) o a consumidor final (CF), con **factura simulada** (serie A, número y autorización). | Precios con **IVA 12 % incluido**: el sistema separa la base y el IVA y la suma siempre da el total exacto. Forma de pago: efectivo (Caja) o tarjeta/transferencia (Bancos). |
 | **Clientes y proveedores** | Altas, búsqueda por NIT o nombre, activar o desactivar. | El **NIT se valida con su dígito verificador** (módulo 11; el 10 se escribe K) y es único. "CF" es del sistema. |
 | **Reportes de ventas** | Ventas, facturas, ticket promedio, utilidad bruta y margen, IVA cobrado; variación contra el período anterior; ventas por día; ranking por producto, categoría, vendedor, cliente y forma de pago con su participación. Períodos rápidos: hoy, semana, mes, mes anterior y año. | El vendedor ve solo sus ventas. La utilidad se calcula sin IVA con el costo promedio de cada venta. |
+| **Productos (CRUD) y fotos** | Alta, edición de la ficha, hasta **5 fotos** por producto (subir, elegir la principal, eliminar), activar/desactivar y eliminar. En la ficha, las fotos se ven en un **carrusel** que avanza solo (se pausa con el mouse encima; flechas, puntos y miniaturas). El catálogo abre con un carrusel de **destacados**. | El formato se valida por la firma de los bytes (no por la extensión). Solo se elimina un producto sin ventas, compras ni movimientos; si ya tiene historia se desactiva. Las 25 fotos de ejemplo son de Wikimedia Commons con licencias libres (créditos en `db/init/imagenes/CREDITOS.md`). |
 | **Ficha del producto** | Marca, categoría, descripción detallada (con párrafos), garantía y especificaciones técnicas. En el catálogo, tocar la foto o el nombre abre la ficha; también se filtra por categoría. | Se edita desde Inventario (BODEGA/ADMIN). Hasta 2000 caracteres de descripción y 20 especificaciones sin nombres repetidos. |
 | **Inventario** | Productos, existencias valorizadas, stock mínimo, **kardex** y ajustes (conteo físico, daño, sobrante). | **Costo promedio ponderado**: cada entrada lo recalcula en el mismo `UPDATE` que suma la existencia, así dos operaciones simultáneas no dejan un costo incorrecto. La existencia solo cambia con movimientos: no se edita a mano. |
 | **Compras** | Órdenes de compra a proveedores (costos sin IVA) → **recepción en bodega** con la factura del proveedor → pago de contado desde Bancos. | La recepción es condicional (`WHERE Estado = 'PENDIENTE'`): si dos personas reciben la misma orden a la vez, solo una lo logra y el inventario no se duplica. |
