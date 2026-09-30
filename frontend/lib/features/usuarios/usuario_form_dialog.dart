@@ -167,11 +167,9 @@ class _UsuarioFormDialogState extends State<UsuarioFormDialog> {
                   ],
                   onChanged: _guardando ? null : (v) => setState(() => _rol = v ?? 'VENDEDOR'),
                 ),
-                if (_rol == 'ADMIN') ...[
-                  const SizedBox(height: 8),
-                  Text('Los administradores configuran Google Authenticator en su primer inicio de sesión.',
-                      style: theme.textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
-                ],
+                const SizedBox(height: 8),
+                Text('Todos los usuarios configuran Google Authenticator en su primer inicio de sesión.',
+                    style: theme.textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
                 if (_esAlta) ...[
                   const SizedBox(height: 16),
                   const InlineBanner.info(

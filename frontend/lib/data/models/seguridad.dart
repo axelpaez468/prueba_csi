@@ -24,7 +24,7 @@ class SegundoFactorRequerido extends ResultadoLogin {
   final String desafio;
 
   /// "TOTP": pedir el código de Google Authenticator.
-  /// "CONFIGURAR": el 2FA es obligatorio (administradores) y aún no está configurado.
+  /// "CONFIGURAR": el 2FA es obligatorio (todos los usuarios) y aún no está configurado.
   final String metodo;
 
   /// Solo al configurar: clave y URI otpauth:// para el código QR.

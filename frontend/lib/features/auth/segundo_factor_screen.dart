@@ -9,7 +9,7 @@ import 'session_controller.dart';
 
 /// Paso 2 del login con Google Authenticator.
 /// - Verificar: código de la app o un código de respaldo.
-/// - Configurar (administradores sin la app): escanear el QR y confirmar el primer código para poder entrar.
+/// - Configurar (primer ingreso, sin la app): escanear el QR y confirmar el primer código para poder entrar.
 class SegundoFactorScreen extends StatefulWidget {
   const SegundoFactorScreen({super.key});
 

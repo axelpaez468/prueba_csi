@@ -256,7 +256,7 @@ class _TarjetaDosFactor extends StatelessWidget {
                 ),
                 if (e.dosFactorObligatorio) ...[
                   const SizedBox(height: 12),
-                  Text('Para administradores la verificación en dos pasos es obligatoria.', style: secundario),
+                  Text('La verificación en dos pasos es obligatoria para todos los usuarios.', style: secundario),
                 ] else if (!e.activo) ...[
                   const SizedBox(height: 12),
                   Text('Google Authenticator es gratuita (Android y iPhone) y funciona sin conexión.', style: secundario),
