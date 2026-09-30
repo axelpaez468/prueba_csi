@@ -1,4 +1,5 @@
 import '../../core/util/formatters.dart';
+import 'producto.dart';
 
 double _d(Object? v) => (v as num?)?.toDouble() ?? 0;
 
@@ -146,6 +147,11 @@ class ProductoInventario {
     required this.activo,
     required this.bajoMinimo,
     this.margen,
+    this.marca,
+    this.categoria,
+    this.descripcion,
+    this.garantiaMeses = 0,
+    this.especificaciones = const [],
   });
 
   final int id;
@@ -159,6 +165,11 @@ class ProductoInventario {
   final bool activo;
   final bool bajoMinimo;
   final double? margen;
+  final String? marca;
+  final String? categoria;
+  final String? descripcion;
+  final int garantiaMeses;
+  final List<Especificacion> especificaciones;
 
   factory ProductoInventario.fromJson(Map<String, dynamic> j) => ProductoInventario(
         id: j['id'] as int,
@@ -172,6 +183,11 @@ class ProductoInventario {
         activo: j['activo'] as bool,
         bajoMinimo: j['bajoMinimo'] as bool,
         margen: (j['margen'] as num?)?.toDouble(),
+        marca: j['marca'] as String?,
+        categoria: j['categoria'] as String?,
+        descripcion: j['descripcion'] as String?,
+        garantiaMeses: (j['garantiaMeses'] as int?) ?? 0,
+        especificaciones: Especificacion.lista(j['especificaciones']),
       );
 }
 
@@ -644,5 +660,148 @@ class Panel {
             .map((v) => v as Map<String, dynamic>)
             .map((v) => (leerDia(v['fecha'] as String), _d(v['total'])))
             .toList(),
+      );
+}
+
+// ---------- Reporte de ventas ----------
+
+class ResumenVentas {
+  const ResumenVentas({
+    required this.facturas,
+    required this.unidades,
+    required this.total,
+    required this.baseImponible,
+    required this.iva,
+    required this.costo,
+    required this.utilidadBruta,
+    required this.margen,
+    required this.ticketPromedio,
+  });
+
+  final int facturas;
+  final int unidades;
+  final double total;
+  final double baseImponible;
+  final double iva;
+  final double costo;
+  final double utilidadBruta;
+  final double margen;
+  final double ticketPromedio;
+
+  factory ResumenVentas.fromJson(Map<String, dynamic> j) => ResumenVentas(
+        facturas: j['facturas'] as int,
+        unidades: j['unidades'] as int,
+        total: _d(j['total']),
+        baseImponible: _d(j['baseImponible']),
+        iva: _d(j['iva']),
+        costo: _d(j['costo']),
+        utilidadBruta: _d(j['utilidadBruta']),
+        margen: _d(j['margen']),
+        ticketPromedio: _d(j['ticketPromedio']),
+      );
+}
+
+/// Fila genérica de un desglose (producto, categoría, vendedor, cliente o forma de pago).
+class FilaReporte {
+  const FilaReporte({
+    required this.titulo,
+    this.detalle,
+    this.cantidad = 0,
+    this.facturas = 0,
+    required this.total,
+    this.utilidad,
+    this.margen,
+    required this.participacion,
+  });
+
+  final String titulo;
+  final String? detalle;
+  final int cantidad;
+  final int facturas;
+  final double total;
+  final double? utilidad;
+  final double? margen;
+
+  /// Porcentaje del total del período.
+  final double participacion;
+}
+
+class ReporteVentas {
+  const ReporteVentas({
+    required this.resumen,
+    required this.anterior,
+    required this.porDia,
+    required this.porProducto,
+    required this.porCategoria,
+    required this.porVendedor,
+    required this.porCliente,
+    required this.porFormaPago,
+  });
+
+  final ResumenVentas resumen;
+  final ResumenVentas anterior;
+  final List<(DateTime, int, double)> porDia;
+  final List<FilaReporte> porProducto;
+  final List<FilaReporte> porCategoria;
+  final List<FilaReporte> porVendedor;
+  final List<FilaReporte> porCliente;
+  final List<FilaReporte> porFormaPago;
+
+  static List<FilaReporte> _filas(Object? json, FilaReporte Function(Map<String, dynamic>) de) =>
+      (json as List).map((e) => de(e as Map<String, dynamic>)).toList();
+
+  factory ReporteVentas.fromJson(Map<String, dynamic> j) => ReporteVentas(
+        resumen: ResumenVentas.fromJson(j['resumen'] as Map<String, dynamic>),
+        anterior: ResumenVentas.fromJson(j['periodoAnterior'] as Map<String, dynamic>),
+        porDia: (j['porDia'] as List)
+            .map((d) => d as Map<String, dynamic>)
+            .map((d) => (leerDia(d['fecha'] as String), d['facturas'] as int, _d(d['total'])))
+            .toList(),
+        porProducto: _filas(
+            j['porProducto'],
+            (p) => FilaReporte(
+                  titulo: p['nombre'] as String,
+                  detalle: [p['codigo'] as String, if (p['categoria'] != null) p['categoria'] as String].join(' · '),
+                  cantidad: p['unidades'] as int,
+                  total: _d(p['total']),
+                  utilidad: _d(p['utilidad']),
+                  margen: _d(p['margen']),
+                  participacion: _d(p['participacion']),
+                )),
+        porCategoria: _filas(
+            j['porCategoria'],
+            (c) => FilaReporte(
+                  titulo: c['categoria'] as String,
+                  cantidad: c['unidades'] as int,
+                  total: _d(c['total']),
+                  utilidad: _d(c['utilidad']),
+                  participacion: _d(c['participacion']),
+                )),
+        porVendedor: _filas(
+            j['porVendedor'],
+            (v) => FilaReporte(
+                  titulo: v['vendedor'] as String,
+                  facturas: v['facturas'] as int,
+                  total: _d(v['total']),
+                  utilidad: _d(v['utilidad']),
+                  participacion: _d(v['participacion']),
+                )),
+        porCliente: _filas(
+            j['porCliente'],
+            (c) => FilaReporte(
+                  titulo: c['cliente'] as String,
+                  detalle: 'NIT ${c['nit']}',
+                  facturas: c['facturas'] as int,
+                  total: _d(c['total']),
+                  participacion: _d(c['participacion']),
+                )),
+        porFormaPago: _filas(
+            j['porFormaPago'],
+            (f) => FilaReporte(
+                  titulo: formaPagoLegible(f['formaPago'] as String),
+                  facturas: f['facturas'] as int,
+                  total: _d(f['total']),
+                  participacion: _d(f['participacion']),
+                )),
       );
 }

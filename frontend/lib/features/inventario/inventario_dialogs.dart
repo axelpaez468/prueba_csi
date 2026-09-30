@@ -6,6 +6,7 @@ import '../../core/network/api_exception.dart';
 import '../../core/util/formatters.dart';
 import '../../core/widgets/app_shell.dart';
 import '../../data/models/erp.dart';
+import '../../data/models/producto.dart';
 import '../../data/repositories/erp_repositories.dart';
 
 final _formatoMonto = FilteringTextInputFormatter.allow(RegExp(r'^\d{0,9}(\.\d{0,2})?'));
@@ -28,6 +29,14 @@ class _ProductoFormDialogState extends State<ProductoFormDialog> {
   late final _nombre = TextEditingController(text: widget.producto?.nombre);
   late final _precio = TextEditingController(text: widget.producto?.precio.toStringAsFixed(2));
   late final _minimo = TextEditingController(text: '${widget.producto?.stockMinimo ?? 0}');
+  late final _marca = TextEditingController(text: widget.producto?.marca);
+  late final _categoria = TextEditingController(text: widget.producto?.categoria);
+  late final _garantia = TextEditingController(text: '${widget.producto?.garantiaMeses ?? 0}');
+  late final _descripcion = TextEditingController(text: widget.producto?.descripcion);
+  late final List<(TextEditingController, TextEditingController)> _specs = [
+    for (final e in widget.producto?.especificaciones ?? const <Especificacion>[])
+      (TextEditingController(text: e.nombre), TextEditingController(text: e.valor)),
+  ];
   late bool _activo = widget.producto?.activo ?? true;
   bool _guardando = false;
   String? _error;
@@ -36,8 +45,12 @@ class _ProductoFormDialogState extends State<ProductoFormDialog> {
 
   @override
   void dispose() {
-    for (final c in [_codigo, _nombre, _precio, _minimo]) {
+    for (final c in [_codigo, _nombre, _precio, _minimo, _marca, _categoria, _garantia, _descripcion]) {
       c.dispose();
+    }
+    for (final (n, v) in _specs) {
+      n.dispose();
+      v.dispose();
     }
     super.dispose();
   }
@@ -55,6 +68,14 @@ class _ProductoFormDialogState extends State<ProductoFormDialog> {
         'precio': leerMonto(_precio.text),
         'stockMinimo': int.parse(_minimo.text),
         'activo': _activo,
+        'marca': _marca.text.trim(),
+        'categoria': _categoria.text.trim(),
+        'garantiaMeses': int.tryParse(_garantia.text) ?? 0,
+        'descripcion': _descripcion.text,
+        'especificaciones': [
+          for (final (n, v) in _specs)
+            if (n.text.trim().isNotEmpty || v.text.trim().isNotEmpty) {'nombre': n.text.trim(), 'valor': v.text.trim()},
+        ],
       });
       if (mounted) Navigator.of(context).pop(guardado);
     } on ApiException catch (e) {
@@ -71,7 +92,7 @@ class _ProductoFormDialogState extends State<ProductoFormDialog> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       content: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 440),
+        constraints: const BoxConstraints(maxWidth: 640),
         child: SingleChildScrollView(
           child: Form(
             key: _form,
@@ -79,6 +100,7 @@ class _ProductoFormDialogState extends State<ProductoFormDialog> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                const _Subtitulo('Datos comerciales'),
                 TextFormField(
                   controller: _codigo,
                   enabled: _esNuevo && !_guardando,
@@ -119,6 +141,34 @@ class _ProductoFormDialogState extends State<ProductoFormDialog> {
                       labelText: 'Stock mínimo', helperText: 'Al llegar a esta existencia se marca para reabastecer.'),
                   validator: (v) => int.tryParse(v ?? '') == null ? 'Ingresa un número' : null,
                 ),
+                const SizedBox(height: 12),
+                _DosColumnas(
+                  TextFormField(
+                    controller: _marca,
+                    enabled: !_guardando,
+                    textCapitalization: TextCapitalization.words,
+                    inputFormatters: [LengthLimitingTextInputFormatter(60)],
+                    decoration: const InputDecoration(labelText: 'Marca (opcional)'),
+                  ),
+                  TextFormField(
+                    controller: _categoria,
+                    enabled: !_guardando,
+                    textCapitalization: TextCapitalization.sentences,
+                    inputFormatters: [LengthLimitingTextInputFormatter(60)],
+                    decoration: const InputDecoration(labelText: 'Categoría (opcional)', hintText: 'Periféricos'),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _garantia,
+                  enabled: !_guardando,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(3)],
+                  decoration: const InputDecoration(labelText: 'Garantía (meses)', helperText: '0 si no tiene garantía; máximo 120.'),
+                  validator: (v) => (int.tryParse(v ?? '') ?? -1) <= 120 && (int.tryParse(v ?? '') ?? -1) >= 0
+                      ? null
+                      : 'Entre 0 y 120 meses',
+                ),
                 if (!_esNuevo) ...[
                   const SizedBox(height: 8),
                   Casilla(
@@ -128,6 +178,70 @@ class _ProductoFormDialogState extends State<ProductoFormDialog> {
                     detalle: 'Un producto inactivo no aparece en el catálogo ni se puede comprar.',
                   ),
                 ],
+                const SizedBox(height: 20),
+                const _Subtitulo('Descripción para el catálogo'),
+                TextFormField(
+                  key: const Key('campo-descripcion'),
+                  controller: _descripcion,
+                  enabled: !_guardando,
+                  minLines: 4,
+                  maxLines: 10,
+                  maxLength: 2000,
+                  keyboardType: TextInputType.multiline,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration: const InputDecoration(
+                    hintText: 'Para qué sirve, qué lo distingue, qué incluye la caja... Separa los párrafos con una línea en blanco.',
+                    alignLabelWithHint: true,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const _Subtitulo('Especificaciones técnicas'),
+                for (final (i, (n, v)) in _specs.indexed) ...[
+                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Expanded(
+                      flex: 2,
+                      child: TextFormField(
+                        controller: n,
+                        enabled: !_guardando,
+                        inputFormatters: [LengthLimitingTextInputFormatter(40)],
+                        decoration: const InputDecoration(labelText: 'Nombre', hintText: 'Conexión', isDense: true),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 3,
+                      child: TextFormField(
+                        controller: v,
+                        enabled: !_guardando,
+                        inputFormatters: [LengthLimitingTextInputFormatter(120)],
+                        decoration: const InputDecoration(labelText: 'Valor', hintText: 'USB-C', isDense: true),
+                        validator: (x) => n.text.trim().isNotEmpty && (x ?? '').trim().isEmpty ? 'Falta el valor' : null,
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Quitar',
+                      onPressed: _guardando
+                          ? null
+                          : () => setState(() {
+                                final (a, b) = _specs.removeAt(i);
+                                a.dispose();
+                                b.dispose();
+                              }),
+                      icon: const Icon(Icons.close, size: 18),
+                    ),
+                  ]),
+                  const SizedBox(height: 8),
+                ],
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: _guardando || _specs.length >= 20
+                        ? null
+                        : () => setState(() => _specs.add((TextEditingController(), TextEditingController()))),
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('Agregar especificación'),
+                  ),
+                ),
                 if (_esNuevo) ...[
                   const SizedBox(height: 12),
                   const InlineBanner.info('Empieza con existencia 0. Ingrésala con una orden de compra o un ajuste de entrada.'),
@@ -271,4 +385,34 @@ class _AjusteDialogState extends State<AjusteDialog> {
       ],
     );
   }
+}
+
+class _Subtitulo extends StatelessWidget {
+  const _Subtitulo(this.texto);
+
+  final String texto;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: Text(texto, style: Theme.of(context).textTheme.titleSmall),
+      );
+}
+
+/// Dos campos lado a lado; en pantallas angostas, uno debajo del otro.
+class _DosColumnas extends StatelessWidget {
+  const _DosColumnas(this.a, this.b);
+
+  final Widget a;
+  final Widget b;
+
+  // Por el ancho de la pantalla y no con LayoutBuilder: AlertDialog mide a sus hijos con dimensiones intrínsecas.
+  @override
+  Widget build(BuildContext context) => MediaQuery.sizeOf(context).width >= 520
+      ? Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Expanded(child: a),
+          const SizedBox(width: 12),
+          Expanded(child: b),
+        ])
+      : Column(children: [a, const SizedBox(height: 12), b]);
 }

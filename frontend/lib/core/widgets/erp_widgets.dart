@@ -364,3 +364,80 @@ class Pills {
         fondo: origen == 'MANUAL' ? const Color(0xFFE8EEF7) : AppColors.background,
       );
 }
+
+/// Gráfica de barras simple. Con muchas barras solo se rotulan algunas para que las etiquetas no se encimen.
+class GraficaBarras extends StatelessWidget {
+  const GraficaBarras({super.key, required this.barras, this.alto = 180});
+
+  /// (etiqueta, valor, texto del tooltip).
+  final List<(String, double, String)> barras;
+  final double alto;
+
+  @override
+  Widget build(BuildContext context) {
+    final maximo = barras.fold<double>(0, (m, b) => b.$2 > m ? b.$2 : m);
+    final paso = (barras.length / 8).ceil().clamp(1, 1000);
+    final separacion = barras.length > 15 ? 2.0 : 6.0;
+
+    return SizedBox(
+      height: alto,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          for (final (i, (etiqueta, valor, tooltip)) in barras.indexed)
+            Expanded(
+              child: Tooltip(
+                message: tooltip,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Expanded(
+                      child: Align(
+                        alignment: Alignment.bottomCenter,
+                        child: FractionallySizedBox(
+                          heightFactor: maximo == 0 ? 0.02 : (valor / maximo).clamp(0.02, 1.0),
+                          child: Container(
+                            margin: EdgeInsets.symmetric(horizontal: separacion),
+                            decoration: BoxDecoration(
+                              color: valor > 0 ? AppColors.primary : AppColors.border,
+                              borderRadius: const BorderRadius.vertical(top: Radius.circular(5)),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      height: 16,
+                      child: i % paso == 0
+                          ? OverflowBox(maxWidth: 80, child: FittedBox(child: textoSecundario(context, etiqueta)))
+                          : null,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Barra horizontal de participación (porcentaje del total).
+class BarraParticipacion extends StatelessWidget {
+  const BarraParticipacion({super.key, required this.porcentaje, this.color = AppColors.accent});
+
+  final double porcentaje;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => ClipRRect(
+        borderRadius: BorderRadius.circular(99),
+        child: LinearProgressIndicator(
+          value: (porcentaje / 100).clamp(0.0, 1.0),
+          minHeight: 6,
+          backgroundColor: AppColors.background,
+          color: color,
+        ),
+      );
+}

@@ -101,6 +101,8 @@ class _PedidosAppState extends State<PedidosApp> {
         Provider.value(value: CompraRepository(_api)),
         Provider.value(value: ContabilidadRepository(_api)),
         Provider.value(value: PanelRepository(_api)),
+        Provider.value(value: ReporteRepository(_api)),
+        Provider.value(value: ProductoRepository(_api)),
         ChangeNotifierProvider.value(value: _session),
         ChangeNotifierProvider.value(value: _catalogo),
         ChangeNotifierProvider.value(value: _carrito),

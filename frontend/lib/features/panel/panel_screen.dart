@@ -100,53 +100,17 @@ class _GraficaSemana extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final maximo = dias.fold<double>(0, (m, d) => d.$2 > m ? d.$2 : m);
-
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Ventas de los últimos 7 días', style: theme.textTheme.titleMedium),
+            Text('Ventas de los últimos 7 días', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 20),
-            SizedBox(
-              height: 180,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  for (final (dia, total) in dias)
-                    Expanded(
-                      child: Tooltip(
-                        message: '${formatearDia(dia)}: ${formatearMoneda(total)}',
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            Expanded(
-                              child: Align(
-                                alignment: Alignment.bottomCenter,
-                                child: FractionallySizedBox(
-                                  heightFactor: maximo == 0 ? 0.02 : (total / maximo).clamp(0.02, 1.0),
-                                  child: Container(
-                                    margin: const EdgeInsets.symmetric(horizontal: 6),
-                                    decoration: BoxDecoration(
-                                      color: total > 0 ? AppColors.primary : AppColors.border,
-                                      borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            FittedBox(child: textoSecundario(context, diaCorto(dia))),
-                          ],
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
+            GraficaBarras(barras: [
+              for (final (dia, total) in dias) (diaCorto(dia), total, '${formatearDia(dia)}: ${formatearMoneda(total)}'),
+            ]),
           ],
         ),
       ),

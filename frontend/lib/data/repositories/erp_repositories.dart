@@ -113,3 +113,12 @@ class PanelRepository {
 
   Future<Panel> resumen() async => Panel.fromJson(await _api.get('/api/panel') as Map<String, dynamic>);
 }
+
+class ReporteRepository {
+  ReporteRepository(this._api);
+
+  final ApiClient _api;
+
+  Future<ReporteVentas> ventas(DateTime desde, DateTime hasta) async => ReporteVentas.fromJson(
+      await _api.get('/api/reportes/ventas?desde=${fechaIso(desde)}&hasta=${fechaIso(hasta)}') as Map<String, dynamic>);
+}

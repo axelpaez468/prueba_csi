@@ -13,6 +13,7 @@ import '../cuenta/bitacora_screen.dart';
 import '../inventario/inventario_screen.dart';
 import '../panel/panel_screen.dart';
 import '../usuarios/usuarios_screen.dart';
+import '../ventas/reporte_ventas_screen.dart';
 import '../ventas/ventas_screen.dart';
 
 /// Módulo del ERP: dónde está y quién puede verlo.
@@ -31,6 +32,8 @@ final modulos = <Modulo>[
   Modulo('Inicio', 'Indicadores del negocio', Icons.dashboard_outlined, 'General', () => const PanelScreen(), (s) => s.vePanel),
   Modulo('Catálogo', 'Productos para vender', Icons.storefront_outlined, 'Ventas', () => const CatalogScreen(), (s) => s.veCatalogo),
   Modulo('Ventas', 'Facturas emitidas', Icons.receipt_long_outlined, 'Ventas', () => const VentasScreen(), (s) => s.consultaVentas),
+  Modulo('Reportes de ventas', 'Por día, producto, vendedor y cliente', Icons.insights_outlined, 'Ventas',
+      () => const ReporteVentasScreen(), (s) => s.consultaVentas),
   Modulo('Clientes', 'NIT y datos de facturación', Icons.people_alt_outlined, 'Ventas', () => const ClientesScreen(),
       (s) => s.gestionaClientes),
   Modulo('Inventario', 'Existencias, costos y kardex', Icons.inventory_2_outlined, 'Inventario', () => const InventarioScreen(),

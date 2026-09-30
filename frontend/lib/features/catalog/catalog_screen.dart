@@ -7,6 +7,7 @@ import '../cart/cart_controller.dart';
 import '../cart/cart_screen.dart';
 import '../shell/app_top_bar.dart';
 import 'catalog_controller.dart';
+import 'producto_detalle_screen.dart';
 import 'producto_tile.dart';
 
 class CatalogScreen extends StatefulWidget {
@@ -18,6 +19,9 @@ class CatalogScreen extends StatefulWidget {
 
 class _CatalogScreenState extends State<CatalogScreen> {
   String _filtro = '';
+
+  /// null: todas las categorías.
+  String? _categoria;
 
   @override
   void initState() {
@@ -31,11 +35,15 @@ class _CatalogScreenState extends State<CatalogScreen> {
     final carrito = context.watch<CartController>();
 
     final termino = _filtro.trim().toLowerCase();
-    final visibles = termino.isEmpty
-        ? catalogo.items
-        : catalogo.items
-            .where((p) => p.nombre.toLowerCase().contains(termino) || p.codigo.toLowerCase().contains(termino))
-            .toList();
+    final categorias = {for (final p in catalogo.items) ?p.categoria}.toList()..sort();
+    final visibles = catalogo.items
+        .where((p) => _categoria == null || p.categoria == _categoria)
+        .where((p) =>
+            termino.isEmpty ||
+            p.nombre.toLowerCase().contains(termino) ||
+            p.codigo.toLowerCase().contains(termino) ||
+            (p.marca?.toLowerCase().contains(termino) ?? false))
+        .toList();
     final disponibles = catalogo.items.where((p) => p.disponible).length;
     final compacto = Breakpoints.esCompacto(context);
 
@@ -58,7 +66,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
                       child: TextField(
                         onChanged: (v) => setState(() => _filtro = v),
                         decoration: const InputDecoration(
-                          hintText: 'Buscar por nombre o código',
+                          hintText: 'Buscar por nombre, código o marca',
                           prefixIcon: Icon(Icons.search),
                           isDense: true,
                         ),
@@ -80,6 +88,27 @@ class _CatalogScreenState extends State<CatalogScreen> {
                 ),
               ),
             ),
+            if (categorias.length > 1)
+              SliverToBoxAdapter(
+                child: PageBody(
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(compacto ? 16 : 24, 0, compacto ? 16 : 24, 16),
+                    child: Wrap(spacing: 8, runSpacing: 8, children: [
+                      ChoiceChip(
+                        label: const Text('Todas'),
+                        selected: _categoria == null,
+                        onSelected: (_) => setState(() => _categoria = null),
+                      ),
+                      for (final c in categorias)
+                        ChoiceChip(
+                          label: Text(c),
+                          selected: _categoria == c,
+                          onSelected: (sel) => setState(() => _categoria = sel ? c : null),
+                        ),
+                    ]),
+                  ),
+                ),
+              ),
             if (catalogo.cargando)
               SliverToBoxAdapter(
                 child: PageBody(
@@ -173,6 +202,8 @@ class _CatalogScreenState extends State<CatalogScreen> {
       key: ValueKey(p.id),
       producto: p,
       enCarrito: carrito.cantidadDe(p.id),
+      onVerDetalle: () =>
+          Navigator.of(context).push(MaterialPageRoute(builder: (_) => ProductoDetalleScreen(producto: p))),
       onAgregar: (cantidad) {
         carrito.agregar(p, cantidad);
         ScaffoldMessenger.of(context)

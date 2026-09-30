@@ -24,6 +24,8 @@ import 'package:pedidos_app/features/cart/cart_controller.dart';
 import 'package:pedidos_app/features/cart/cart_screen.dart';
 import 'package:pedidos_app/features/catalog/catalog_controller.dart';
 import 'package:pedidos_app/features/catalog/catalog_screen.dart';
+import 'package:pedidos_app/features/catalog/producto_detalle_screen.dart';
+import 'package:pedidos_app/features/ventas/reporte_ventas_screen.dart';
 import 'package:pedidos_app/features/clientes/clientes_screen.dart';
 import 'package:pedidos_app/features/clientes/tercero_form_dialog.dart';
 import 'package:pedidos_app/features/compras/ordenes_screen.dart';
@@ -57,7 +59,7 @@ const _tamanos = {
 };
 
 final _productos = [
-  const Producto(id: 1, codigo: 'P-001', nombre: 'Teclado mecánico', precio: 450, stock: 25),
+  const Producto(id: 1, codigo: 'P-001', nombre: 'Teclado mecánico', precio: 450, stock: 25, marca: 'KeyForge', categoria: 'Periféricos'),
   const Producto(id: 2, codigo: 'P-002', nombre: 'Mouse inalámbrico', precio: 125.5, stock: 3),
   const Producto(id: 3, codigo: 'P-003', nombre: 'Monitor 27" con nombre largo para probar el ajuste', precio: 2350, stock: 1),
   const Producto(id: 4, codigo: 'P-004', nombre: 'Audífonos USB', precio: 199.99, stock: 12),
@@ -113,7 +115,43 @@ final _lineaPartida = [
   {'cuentaId': 3, 'codigo': '2102', 'cuenta': 'IVA por pagar (débito fiscal) con nombre largo', 'debe': 0, 'haber': 1234567.89},
 ];
 
+List<Map<String, dynamic>> _filasReporte(String clave) => [
+      for (var i = 1; i <= 3; i++)
+        {
+          'productoId': i, 'codigo': 'P-00$i', 'nombre': 'Monitor 27" con nombre largo para probar el ajuste $i',
+          'categoria': 'Periféricos', 'unidades': 12345, 'total': 1234567.89, 'ventasSinIva': 1102292.76, 'costo': 800000,
+          'utilidad': 302292.76, 'margen': 27.4, 'participacion': 33.3, 'usuarioId': i,
+          'vendedor': 'María Fernanda Hernández de la Cruz', 'facturas': 120, 'clienteId': i, 'nit': '1234567-9',
+          'cliente': _nombreLargo, 'formaPago': 'TRANSFERENCIA', 'clave': clave,
+        },
+    ];
+
+Map<String, dynamic> _resumenVentas(double total) => {
+      'facturas': 120, 'unidades': 3456, 'total': total, 'baseImponible': total / 1.12, 'iva': total - total / 1.12,
+      'costo': 800000, 'utilidadBruta': 302292.76, 'margen': 27.4, 'ticketPromedio': 10288.07,
+    };
+
 Object? _respuestaErp(String ruta) => switch (ruta) {
+      '/api/productos/1' => {
+          'id': 1, 'codigo': 'P-001', 'nombre': 'Teclado mecánico con un nombre largo', 'precio': 450, 'stock': 2,
+          'marca': 'KeyForge', 'categoria': 'Periféricos', 'garantiaMeses': 12,
+          'descripcion': 'Teclado mecánico de tamaño completo pensado para jornadas largas.\n\nIncluye reposamuñecas y cable USB-C.',
+          'especificaciones': [
+            {'nombre': 'Interruptores', 'valor': 'Mecánicos lineales rojos, 45 g, 50 millones de pulsaciones'},
+            {'nombre': 'Conexión', 'valor': 'USB-C desmontable'},
+          ],
+        },
+      '/api/reportes/ventas' => {
+          'desde': '2026-09-01', 'hasta': '2026-09-30',
+          'resumen': _resumenVentas(1234567.89),
+          'periodoAnterior': _resumenVentas(1000000),
+          'porDia': [for (var d = 1; d <= 30; d++) {'fecha': '2026-09-${d.toString().padLeft(2, '0')}', 'facturas': d, 'total': d * 1000.0}],
+          'porProducto': _filasReporte('p'),
+          'porCategoria': _filasReporte('c'),
+          'porVendedor': _filasReporte('v'),
+          'porCliente': _filasReporte('cl'),
+          'porFormaPago': _filasReporte('f'),
+        },
       '/api/panel' => {
           'ventasHoy': 12345.67,
           'cantidadVentasHoy': 3,
@@ -219,7 +257,8 @@ http.Response _responder(http.Request req) {
   final cuerpo = switch (req.url.path) {
     '/api/productos' => [
         for (final p in _productos)
-          {'id': p.id, 'codigo': p.codigo, 'nombre': p.nombre, 'precio': p.precio, 'stock': p.stock},
+          {'id': p.id, 'codigo': p.codigo, 'nombre': p.nombre, 'precio': p.precio, 'stock': p.stock, 'marca': p.marca,
+            'categoria': p.categoria},
       ],
     '/api/cuenta/seguridad' => {
         'email': 'usuario-con-correo-bastante-largo@empresa-de-ejemplo.com',
@@ -297,6 +336,8 @@ Future<void> _montar(WidgetTester tester, Size tamano, Widget pantalla, {_Sesion
       Provider.value(value: CompraRepository(api)),
       Provider.value(value: ContabilidadRepository(api)),
       Provider.value(value: PanelRepository(api)),
+      Provider.value(value: ReporteRepository(api)),
+      Provider.value(value: ProductoRepository(api)),
       ChangeNotifierProvider.value(value: session),
       ChangeNotifierProvider.value(value: catalogo),
       ChangeNotifierProvider.value(value: carrito),
@@ -488,6 +529,40 @@ void main() {
         expect(find.textContaining('Bancos'), findsWidgets);
         await _montar(tester, tamano, LibroMayorScreen(cuenta: CuentaContable.fromJson(_cuentas[0])));
         expect(find.text('Saldo final'), findsOneWidget);
+      });
+
+      testWidgets('ficha del producto', (tester) async {
+        await _montar(tester, tamano, ProductoDetalleScreen(producto: _productos[0]));
+        expect(find.text('Especificaciones técnicas'), findsOneWidget);
+        expect(find.text('1 año de garantía'), findsOneWidget);
+      });
+
+      testWidgets('formulario de producto con ficha', (tester) async {
+        await _montar(tester, tamano, Scaffold(body: ProductoFormDialog(producto: ProductoInventario.fromJson({
+          ..._productoInv(1),
+          'marca': 'KeyForge',
+          'categoria': 'Periféricos',
+          'descripcion': 'Descripción larga',
+          'garantiaMeses': 12,
+          'especificaciones': [
+            {'nombre': 'Conexión', 'valor': 'USB-C'},
+          ],
+        }))));
+        expect(find.text('Especificaciones técnicas'), findsOneWidget);
+        expect(find.text('USB-C'), findsWidgets);
+      });
+
+      testWidgets('reporte de ventas', (tester) async {
+        await _montar(tester, tamano, const ReporteVentasScreen());
+        expect(find.text('Ticket promedio'), findsOneWidget);
+        expect(find.textContaining('vs. período anterior'), findsWidgets);
+        for (final pestana in ['Vendedores', 'Clientes', 'Formas de pago']) {
+          await tester.ensureVisible(find.text(pestana));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text(pestana));
+          await tester.pumpAndSettle();
+        }
+        expect(find.textContaining('Transferencia'), findsWidgets);
       });
 
       testWidgets('estados financieros', (tester) async {
