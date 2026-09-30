@@ -149,7 +149,13 @@ class StatusPill extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (icono != null) ...[Icon(icono, size: 14, color: color), const SizedBox(width: 4)],
-          Text(texto, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600)),
+          // Flexible: en una columna angosta (p. ej. una tabla) el texto se recorta en vez de desbordar.
+          Flexible(
+            child: Text(texto,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600)),
+          ),
         ],
       ),
     );

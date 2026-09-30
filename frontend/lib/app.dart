@@ -10,6 +10,7 @@ import 'data/repositories/auth_repository.dart';
 import 'data/repositories/cuenta_repository.dart';
 import 'data/repositories/pedido_repository.dart';
 import 'data/repositories/producto_repository.dart';
+import 'data/repositories/usuario_repository.dart';
 import 'features/auth/login_screen.dart';
 import 'features/auth/restablecer_password_screen.dart';
 import 'features/auth/segundo_factor_screen.dart';
@@ -86,6 +87,7 @@ class _PedidosAppState extends State<PedidosApp> {
       providers: [
         Provider.value(value: _authRepo),
         Provider.value(value: _cuentaRepo),
+        Provider.value(value: UsuarioRepository(_api)),
         ChangeNotifierProvider.value(value: _session),
         ChangeNotifierProvider.value(value: _catalogo),
         ChangeNotifierProvider.value(value: _carrito),

@@ -8,6 +8,7 @@ import '../cart/cart_controller.dart';
 import '../cart/cart_screen.dart';
 import '../cuenta/bitacora_screen.dart';
 import '../cuenta/seguridad_screen.dart';
+import '../usuarios/usuarios_screen.dart';
 
 /// Barra superior común: logo, acceso al carrito y menú del usuario.
 class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
@@ -85,6 +86,8 @@ class _MenuUsuario extends StatelessWidget {
         switch (v) {
           case 'seguridad':
             navigator.push(MaterialPageRoute(builder: (_) => const SeguridadScreen()));
+          case 'usuarios':
+            navigator.push(MaterialPageRoute(builder: (_) => const UsuariosScreen()));
           case 'bitacora':
             navigator.push(MaterialPageRoute(builder: (_) => const BitacoraScreen()));
           case 'salir':
@@ -108,6 +111,11 @@ class _MenuUsuario extends StatelessWidget {
           value: 'seguridad',
           child: Row(children: [Icon(Icons.shield_outlined, size: 18), SizedBox(width: 10), Text('Seguridad de la cuenta')]),
         ),
+        if (session.esAdmin)
+          const PopupMenuItem<String>(
+            value: 'usuarios',
+            child: Row(children: [Icon(Icons.group_outlined, size: 18), SizedBox(width: 10), Text('Usuarios')]),
+          ),
         if (session.esAdmin)
           const PopupMenuItem<String>(
             value: 'bitacora',

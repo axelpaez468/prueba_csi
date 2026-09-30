@@ -31,6 +31,10 @@ class ApiClient {
   Future<dynamic> post(String path, Object body, {bool authenticated = true}) =>
       _send('POST', path, body: body, authenticated: authenticated);
 
+  Future<dynamic> put(String path, Object body) => _send('PUT', path, body: body);
+
+  Future<dynamic> delete(String path) => _send('DELETE', path);
+
   Future<dynamic> _send(String method, String path, {Object? body, bool authenticated = true}) async {
     final request = http.Request(method, _baseUri.resolve(path))
       ..headers['Accept'] = 'application/json';

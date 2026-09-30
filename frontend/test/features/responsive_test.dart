@@ -13,6 +13,7 @@ import 'package:pedidos_app/data/repositories/auth_repository.dart';
 import 'package:pedidos_app/data/repositories/cuenta_repository.dart';
 import 'package:pedidos_app/data/repositories/pedido_repository.dart';
 import 'package:pedidos_app/data/repositories/producto_repository.dart';
+import 'package:pedidos_app/data/repositories/usuario_repository.dart';
 import 'package:pedidos_app/features/auth/login_screen.dart';
 import 'package:pedidos_app/features/auth/recuperar_password_screen.dart';
 import 'package:pedidos_app/features/auth/restablecer_password_screen.dart';
@@ -25,6 +26,8 @@ import 'package:pedidos_app/features/catalog/catalog_screen.dart';
 import 'package:pedidos_app/features/cuenta/bitacora_screen.dart';
 import 'package:pedidos_app/features/cuenta/seguridad_screen.dart';
 import 'package:pedidos_app/features/order/order_confirmation_screen.dart';
+import 'package:pedidos_app/features/usuarios/usuario_form_dialog.dart';
+import 'package:pedidos_app/features/usuarios/usuarios_screen.dart';
 import 'package:provider/provider.dart';
 
 import '../infra/storage_en_memoria.dart';
@@ -76,6 +79,27 @@ http.Response _responder(http.Request req) {
         'dosFactorObligatorio': true,
       },
     '/api/cuenta/accesos' || '/api/admin/bitacora' => _accesos,
+    '/api/admin/usuarios' => [
+        for (final (i, (nombre, rol, activo, pass)) in [
+          ('María Fernanda', 'ADMIN', true, true),
+          ('José Alejandro', 'VENDEDOR', true, false),
+          ('Ana Lucía', 'VENDEDOR', false, true),
+        ].indexed)
+          {
+            'id': i + 1,
+            'nombre': nombre,
+            'apellido': 'Hernández de la Cruz',
+            'nombreCompleto': '$nombre Hernández de la Cruz',
+            'email': 'usuario.con.correo.largo$i@empresa-ejemplo.com.gt',
+            'telefono': '+5025555010$i',
+            'codigoCorporativo': 'VEN-000$i',
+            'rol': rol,
+            'activo': activo,
+            'dosFactor': rol == 'ADMIN' ? 'SMS' : 'NINGUNO',
+            'tieneContrasena': pass,
+            'creadoEn': '2026-09-29T15:30:00Z',
+          },
+      ],
     '/api/auth/login' => {'requiereSegundoFactor': true, 'desafio': 'd', 'metodo': 'SMS', 'destino': '+502 •••• 0101'},
     _ => <String, dynamic>{},
   };
@@ -117,6 +141,7 @@ Future<void> _montar(WidgetTester tester, Size tamano, Widget pantalla, {_Sesion
     providers: [
       Provider.value(value: auth),
       Provider.value(value: CuentaRepository(api)),
+      Provider.value(value: UsuarioRepository(api)),
       ChangeNotifierProvider.value(value: session),
       ChangeNotifierProvider.value(value: catalogo),
       ChangeNotifierProvider.value(value: carrito),
@@ -189,6 +214,18 @@ void main() {
         expect(find.text('Cambiar contraseña'), findsOneWidget);
       });
 
+      testWidgets('usuarios', (tester) async {
+        await _montar(tester, tamano, const UsuariosScreen());
+        expect(find.text('Usuarios'), findsWidgets);
+        expect(find.textContaining('José Alejandro'), findsOneWidget);
+        expect(find.text('Invitación pendiente'), findsOneWidget);
+      });
+
+      testWidgets('formulario de usuario', (tester) async {
+        await _montar(tester, tamano, const Scaffold(body: UsuarioFormDialog()));
+        expect(find.text('Nuevo usuario'), findsOneWidget);
+        expect(find.text('+502 '), findsOneWidget);
+      });
       testWidgets('bitácora de accesos', (tester) async {
         await _montar(tester, tamano, const BitacoraScreen());
         expect(find.text('Bitácora de accesos'), findsOneWidget);
