@@ -223,6 +223,209 @@ IF COL_LENGTH(N'dbo.Usuarios', N'TelefonoPendiente') IS NOT NULL
 IF OBJECT_ID(N'dbo.CodigosVerificacion', N'U') IS NOT NULL
     DROP TABLE dbo.CodigosVerificacion;
 GO
+
+-- =====================================================================
+-- ERP: ventas con cliente y factura, inventario con kardex y costo promedio, compras y contabilidad.
+-- =====================================================================
+
+-- Roles nuevos: BODEGA, COMPRAS y CONTADOR.
+IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_Usuarios_Rol' AND definition NOT LIKE N'%BODEGA%')
+BEGIN
+    ALTER TABLE dbo.Usuarios DROP CONSTRAINT CK_Usuarios_Rol;
+    ALTER TABLE dbo.Usuarios ADD CONSTRAINT CK_Usuarios_Rol
+        CHECK (Rol IN (N'VENDEDOR', N'ADMIN', N'BODEGA', N'COMPRAS', N'CONTADOR'));
+END
+GO
+
+-- Productos: costo promedio (sin IVA), stock mínimo y baja lógica.
+IF COL_LENGTH(N'dbo.Productos', N'CostoPromedio') IS NULL
+    ALTER TABLE dbo.Productos ADD CostoPromedio DECIMAL(18,4) NOT NULL
+        CONSTRAINT DF_Productos_CostoPromedio DEFAULT (0)
+        CONSTRAINT CK_Productos_Costo CHECK (CostoPromedio >= 0);
+IF COL_LENGTH(N'dbo.Productos', N'StockMinimo') IS NULL
+    ALTER TABLE dbo.Productos ADD StockMinimo INT NOT NULL
+        CONSTRAINT DF_Productos_StockMinimo DEFAULT (0)
+        CONSTRAINT CK_Productos_StockMinimo CHECK (StockMinimo >= 0);
+IF COL_LENGTH(N'dbo.Productos', N'Activo') IS NULL
+    ALTER TABLE dbo.Productos ADD Activo BIT NOT NULL CONSTRAINT DF_Productos_Activo DEFAULT (1);
+GO
+
+IF OBJECT_ID(N'dbo.Clientes', N'U') IS NULL
+CREATE TABLE dbo.Clientes (
+    Id        INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_Clientes PRIMARY KEY,
+    Nit       NVARCHAR(15)  NOT NULL CONSTRAINT UQ_Clientes_Nit UNIQUE,   -- sin guion; "CF" = consumidor final
+    Nombre    NVARCHAR(150) NOT NULL,
+    Direccion NVARCHAR(200) NULL,
+    Telefono  NVARCHAR(20)  NULL,
+    Email     NVARCHAR(254) NULL,
+    Activo    BIT           NOT NULL CONSTRAINT DF_Clientes_Activo DEFAULT (1),
+    CreadoEn  DATETIME2     NOT NULL CONSTRAINT DF_Clientes_CreadoEn DEFAULT (SYSUTCDATETIME())
+);
+GO
+IF NOT EXISTS (SELECT 1 FROM dbo.Clientes WHERE Nit = N'CF')
+    INSERT INTO dbo.Clientes (Nit, Nombre, Direccion) VALUES (N'CF', N'Consumidor Final', N'Ciudad');
+GO
+
+IF OBJECT_ID(N'dbo.Proveedores', N'U') IS NULL
+CREATE TABLE dbo.Proveedores (
+    Id        INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_Proveedores PRIMARY KEY,
+    Nit       NVARCHAR(15)  NOT NULL CONSTRAINT UQ_Proveedores_Nit UNIQUE,
+    Nombre    NVARCHAR(150) NOT NULL,
+    Contacto  NVARCHAR(100) NULL,
+    Telefono  NVARCHAR(20)  NULL,
+    Email     NVARCHAR(254) NULL,
+    Direccion NVARCHAR(200) NULL,
+    Activo    BIT           NOT NULL CONSTRAINT DF_Proveedores_Activo DEFAULT (1),
+    CreadoEn  DATETIME2     NOT NULL CONSTRAINT DF_Proveedores_CreadoEn DEFAULT (SYSUTCDATETIME())
+);
+GO
+
+-- Pedidos = ventas de contado con factura (simulación FEL). Precios con IVA incluido.
+IF COL_LENGTH(N'dbo.Pedidos', N'ClienteId') IS NULL
+    ALTER TABLE dbo.Pedidos ADD ClienteId INT NULL;
+IF COL_LENGTH(N'dbo.Pedidos', N'FormaPago') IS NULL
+    ALTER TABLE dbo.Pedidos ADD FormaPago NVARCHAR(15) NOT NULL CONSTRAINT DF_Pedidos_FormaPago DEFAULT (N'EFECTIVO')
+        CONSTRAINT CK_Pedidos_FormaPago CHECK (FormaPago IN (N'EFECTIVO', N'TARJETA', N'TRANSFERENCIA'));
+IF COL_LENGTH(N'dbo.Pedidos', N'BaseImponible') IS NULL
+    ALTER TABLE dbo.Pedidos ADD BaseImponible DECIMAL(18,2) NOT NULL CONSTRAINT DF_Pedidos_BaseImponible DEFAULT (0);
+IF COL_LENGTH(N'dbo.Pedidos', N'Iva') IS NULL
+    ALTER TABLE dbo.Pedidos ADD Iva DECIMAL(18,2) NOT NULL CONSTRAINT DF_Pedidos_Iva DEFAULT (0);
+IF COL_LENGTH(N'dbo.Pedidos', N'Costo') IS NULL
+    ALTER TABLE dbo.Pedidos ADD Costo DECIMAL(18,2) NOT NULL CONSTRAINT DF_Pedidos_Costo DEFAULT (0);
+IF COL_LENGTH(N'dbo.Pedidos', N'Autorizacion') IS NULL
+    ALTER TABLE dbo.Pedidos ADD Autorizacion UNIQUEIDENTIFIER NOT NULL CONSTRAINT DF_Pedidos_Autorizacion DEFAULT (NEWID());
+IF COL_LENGTH(N'dbo.PedidoDetalle', N'CostoUnitario') IS NULL
+    ALTER TABLE dbo.PedidoDetalle ADD CostoUnitario DECIMAL(18,4) NOT NULL CONSTRAINT DF_PedidoDetalle_CostoUnitario DEFAULT (0);
+GO
+
+-- Pedidos anteriores al ERP: a consumidor final, con el IVA separado del total.
+UPDATE dbo.Pedidos SET ClienteId = (SELECT Id FROM dbo.Clientes WHERE Nit = N'CF') WHERE ClienteId IS NULL;
+UPDATE dbo.Pedidos SET BaseImponible = ROUND(Total / 1.12, 2), Iva = Total - ROUND(Total / 1.12, 2)
+ WHERE BaseImponible = 0 AND Total > 0;
+GO
+IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.Pedidos') AND name = N'ClienteId' AND is_nullable = 1)
+    ALTER TABLE dbo.Pedidos ALTER COLUMN ClienteId INT NOT NULL;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_Pedidos_Clientes')
+    ALTER TABLE dbo.Pedidos ADD CONSTRAINT FK_Pedidos_Clientes FOREIGN KEY (ClienteId) REFERENCES dbo.Clientes(Id);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_Pedidos_ClienteId')
+    CREATE INDEX IX_Pedidos_ClienteId ON dbo.Pedidos(ClienteId);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_Pedidos_Fecha')
+    CREATE INDEX IX_Pedidos_Fecha ON dbo.Pedidos(Fecha);
+GO
+
+-- Kardex: nunca se edita ni se borra.
+IF OBJECT_ID(N'dbo.MovimientosInventario', N'U') IS NULL
+CREATE TABLE dbo.MovimientosInventario (
+    Id            BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_MovimientosInventario PRIMARY KEY,
+    ProductoId    INT           NOT NULL CONSTRAINT FK_Movimientos_Productos REFERENCES dbo.Productos(Id),
+    Fecha         DATETIME2     NOT NULL,
+    Tipo          NVARCHAR(20)  NOT NULL CONSTRAINT CK_Movimientos_Tipo
+                  CHECK (Tipo IN (N'INICIAL', N'VENTA', N'COMPRA', N'AJUSTE_ENTRADA', N'AJUSTE_SALIDA')),
+    Cantidad      INT           NOT NULL,      -- positiva: entrada; negativa: salida
+    CostoUnitario DECIMAL(18,4) NOT NULL,
+    Saldo         INT           NOT NULL CONSTRAINT CK_Movimientos_Saldo CHECK (Saldo >= 0),
+    CostoPromedio DECIMAL(18,4) NOT NULL,
+    Referencia    NVARCHAR(120) NOT NULL,
+    UsuarioId     INT           NULL CONSTRAINT FK_Movimientos_Usuarios REFERENCES dbo.Usuarios(Id),
+    INDEX IX_Movimientos_Producto (ProductoId, Id)
+);
+GO
+
+IF OBJECT_ID(N'dbo.OrdenesCompra', N'U') IS NULL
+CREATE TABLE dbo.OrdenesCompra (
+    Id               INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_OrdenesCompra PRIMARY KEY,
+    ProveedorId      INT           NOT NULL CONSTRAINT FK_OrdenesCompra_Proveedores REFERENCES dbo.Proveedores(Id),
+    Fecha            DATETIME2     NOT NULL,
+    Estado           NVARCHAR(10)  NOT NULL CONSTRAINT CK_OrdenesCompra_Estado CHECK (Estado IN (N'PENDIENTE', N'RECIBIDA', N'ANULADA')),
+    Subtotal         DECIMAL(18,2) NOT NULL,   -- sin IVA
+    Iva              DECIMAL(18,2) NOT NULL,
+    Total            DECIMAL(18,2) NOT NULL,
+    Observaciones    NVARCHAR(300) NULL,
+    UsuarioId        INT           NOT NULL CONSTRAINT FK_OrdenesCompra_Usuarios REFERENCES dbo.Usuarios(Id),
+    FechaRecepcion   DATETIME2     NULL,
+    RecibidaPorId    INT           NULL CONSTRAINT FK_OrdenesCompra_RecibidaPor REFERENCES dbo.Usuarios(Id),
+    FacturaProveedor NVARCHAR(40)  NULL,
+    INDEX IX_OrdenesCompra_Estado (Estado)
+);
+GO
+
+IF OBJECT_ID(N'dbo.OrdenCompraDetalle', N'U') IS NULL
+CREATE TABLE dbo.OrdenCompraDetalle (
+    OrdenCompraId INT           NOT NULL CONSTRAINT FK_OrdenCompraDetalle_Ordenes REFERENCES dbo.OrdenesCompra(Id) ON DELETE CASCADE,
+    ProductoId    INT           NOT NULL CONSTRAINT FK_OrdenCompraDetalle_Productos REFERENCES dbo.Productos(Id),
+    Cantidad      INT           NOT NULL CONSTRAINT CK_OrdenCompraDetalle_Cantidad CHECK (Cantidad > 0),
+    CostoUnitario DECIMAL(18,2) NOT NULL CONSTRAINT CK_OrdenCompraDetalle_Costo CHECK (CostoUnitario > 0),
+    Subtotal      DECIMAL(18,2) NOT NULL,
+    CONSTRAINT PK_OrdenCompraDetalle PRIMARY KEY (OrdenCompraId, ProductoId)
+);
+GO
+
+-- Contabilidad: el primer dígito del código define el tipo de cuenta.
+IF OBJECT_ID(N'dbo.CuentasContables', N'U') IS NULL
+CREATE TABLE dbo.CuentasContables (
+    Id     INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_CuentasContables PRIMARY KEY,
+    Codigo NVARCHAR(10)  NOT NULL CONSTRAINT UQ_CuentasContables_Codigo UNIQUE,
+    Nombre NVARCHAR(100) NOT NULL,
+    Tipo   NVARCHAR(10)  NOT NULL CONSTRAINT CK_Cuentas_Tipo
+           CHECK (Tipo IN (N'ACTIVO', N'PASIVO', N'CAPITAL', N'INGRESO', N'COSTO', N'GASTO')),
+    Activa BIT           NOT NULL CONSTRAINT DF_CuentasContables_Activa DEFAULT (1)
+);
+GO
+
+IF OBJECT_ID(N'dbo.Partidas', N'U') IS NULL
+CREATE TABLE dbo.Partidas (
+    Id           INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_Partidas PRIMARY KEY,
+    Fecha        DATE          NOT NULL,      -- fecha contable (hora de Guatemala)
+    Concepto     NVARCHAR(200) NOT NULL,
+    Origen       NVARCHAR(10)  NOT NULL CONSTRAINT CK_Partidas_Origen
+                 CHECK (Origen IN (N'APERTURA', N'VENTA', N'COMPRA', N'AJUSTE', N'MANUAL')),
+    ReferenciaId BIGINT        NULL,          -- venta, orden de compra o movimiento que la originó
+    UsuarioId    INT           NULL CONSTRAINT FK_Partidas_Usuarios REFERENCES dbo.Usuarios(Id),
+    CreadoEn     DATETIME2     NOT NULL,
+    Total        DECIMAL(18,2) NOT NULL,
+    INDEX IX_Partidas_Fecha (Fecha),
+    INDEX IX_Partidas_Origen (Origen, ReferenciaId)
+);
+GO
+
+IF OBJECT_ID(N'dbo.PartidaDetalle', N'U') IS NULL
+CREATE TABLE dbo.PartidaDetalle (
+    Id        BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_PartidaDetalle PRIMARY KEY,
+    PartidaId INT           NOT NULL CONSTRAINT FK_PartidaDetalle_Partidas REFERENCES dbo.Partidas(Id) ON DELETE CASCADE,
+    CuentaId  INT           NOT NULL CONSTRAINT FK_PartidaDetalle_Cuentas REFERENCES dbo.CuentasContables(Id),
+    Debe      DECIMAL(18,2) NOT NULL,
+    Haber     DECIMAL(18,2) NOT NULL,
+    -- Cada línea va al debe o al haber, nunca a ambos ni con montos negativos.
+    CONSTRAINT CK_PartidaDetalle_Montos CHECK (Debe >= 0 AND Haber >= 0 AND ((Debe > 0 AND Haber = 0) OR (Haber > 0 AND Debe = 0))),
+    INDEX IX_PartidaDetalle_Cuenta (CuentaId)
+);
+GO
+
+-- Catálogo de cuentas base (se agregan las que falten).
+INSERT INTO dbo.CuentasContables (Codigo, Nombre, Tipo)
+SELECT c.Codigo, c.Nombre, c.Tipo
+  FROM (VALUES
+    (N'1101', N'Caja', N'ACTIVO'),
+    (N'1102', N'Bancos', N'ACTIVO'),
+    (N'1103', N'Inventario de mercadería', N'ACTIVO'),
+    (N'1104', N'IVA por cobrar (crédito fiscal)', N'ACTIVO'),
+    (N'2101', N'Proveedores', N'PASIVO'),
+    (N'2102', N'IVA por pagar (débito fiscal)', N'PASIVO'),
+    (N'3101', N'Capital social', N'CAPITAL'),
+    (N'3102', N'Resultados acumulados', N'CAPITAL'),
+    (N'4101', N'Ventas', N'INGRESO'),
+    (N'4102', N'Otros ingresos', N'INGRESO'),
+    (N'5101', N'Costo de ventas', N'COSTO'),
+    (N'6101', N'Sueldos y salarios', N'GASTO'),
+    (N'6102', N'Alquileres', N'GASTO'),
+    (N'6103', N'Energía eléctrica, agua y teléfono', N'GASTO'),
+    (N'6104', N'Faltantes y mermas de inventario', N'GASTO'),
+    (N'6105', N'Gastos varios', N'GASTO')
+  ) AS c (Codigo, Nombre, Tipo)
+ WHERE NOT EXISTS (SELECT 1 FROM dbo.CuentasContables x WHERE x.Codigo = c.Codigo);
+GO
+
 -- ---------- Datos semilla ----------
 -- Hashes BCrypt (work factor 11). Contraseñas de prueba documentadas en el README.
 -- Cada usuario configura Google Authenticator en su primer inicio de sesión (el 2FA es obligatorio para todos).
@@ -234,13 +437,85 @@ INSERT INTO dbo.Usuarios (Username, Nombre, Apellido, CodigoCorporativo, Email, 
      N'$2a$11$E6LutlNGkp4N/dpe38.jW.ZfVU6YeW/D4mgxag/fpqIMZWisZA4FW', N'ADMIN', N'NINGUNO', N'+50255550101');
 GO
 
+-- Usuarios de demostración de los roles del ERP (se agregan también a una BD existente).
+INSERT INTO dbo.Usuarios (Username, Nombre, Apellido, CodigoCorporativo, Email, PasswordHash, Rol, DosFactor, Telefono)
+SELECT u.Username, u.Nombre, u.Apellido, u.Codigo, u.Email, u.Hash, u.Rol, N'NINGUNO', u.Telefono
+  FROM (VALUES
+    (N'Bodega Demo', N'Bodega', N'Demo', N'BOD-0001', N'bodega@pedidos.local',
+     N'$2a$11$DcvNL1n5aOQr31oWKErOEeN6StaBnirH/H4LSNzXxRJqQkZ0ZB6FO', N'BODEGA', N'+50255550103'),
+    (N'Compras Demo', N'Compras', N'Demo', N'COM-0001', N'compras@pedidos.local',
+     N'$2a$11$lk46wuJUh20Uid6ZZerOd.ZX0UOROh8allG0Tp5QVxTGpWcOEkI1W', N'COMPRAS', N'+50255550104'),
+    (N'Contador Demo', N'Contador', N'Demo', N'CON-0001', N'contador@pedidos.local',
+     N'$2a$11$N5znA8RpJJQ0kxoIaf3SrezhLdUAdcpjscJd1oyLZYRaD.QCtKAbS', N'CONTADOR', N'+50255550105')
+  ) AS u (Username, Nombre, Apellido, Codigo, Email, Hash, Rol, Telefono)
+ WHERE NOT EXISTS (SELECT 1 FROM dbo.Usuarios x WHERE x.Email = u.Email OR x.CodigoCorporativo = u.Codigo);
+GO
+
+-- Precios con IVA; costos promedio sin IVA.
 IF NOT EXISTS (SELECT 1 FROM dbo.Productos)
-INSERT INTO dbo.Productos (Codigo, Nombre, Precio, Stock) VALUES
-    (N'P-001', N'Teclado mecánico',    450.00, 25),
-    (N'P-002', N'Mouse inalámbrico',   125.50, 40),
-    (N'P-003', N'Monitor 27"',        2350.00,  1),  -- stock 1: para probar la regla de concurrencia
-    (N'P-004', N'Audífonos USB',       199.99, 12),
-    (N'P-005', N'Webcam HD',           310.00,  0);  -- sin stock: se muestra deshabilitado en el catálogo
+INSERT INTO dbo.Productos (Codigo, Nombre, Precio, Stock, CostoPromedio, StockMinimo) VALUES
+    (N'P-001', N'Teclado mecánico',    450.00, 25,  260.00,  5),
+    (N'P-002', N'Mouse inalámbrico',   125.50, 40,   70.00, 10),
+    (N'P-003', N'Monitor 27"',        2350.00,  1, 1450.00,  2),  -- stock 1: para probar la regla de concurrencia
+    (N'P-004', N'Audífonos USB',       199.99, 12,  110.00,  5),
+    (N'P-005', N'Webcam HD',           310.00,  0,  180.00,  3);  -- sin stock: se muestra deshabilitado en el catálogo
+GO
+
+IF NOT EXISTS (SELECT 1 FROM dbo.Proveedores)
+INSERT INTO dbo.Proveedores (Nit, Nombre, Contacto, Telefono, Email, Direccion) VALUES
+    (N'33445567', N'Distribuidora Tecnológica, S.A.', N'Ana Pérez', N'+50222220101', N'ventas@distritec.example', N'Zona 4, Ciudad de Guatemala'),
+    (N'66778891', N'Importadora del Pacífico, S.A.', N'Luis Gómez', N'+50277770202', N'pedidos@impacifico.example', N'Escuintla');
+GO
+
+IF NOT EXISTS (SELECT 1 FROM dbo.Clientes WHERE Nit <> N'CF')
+INSERT INTO dbo.Clientes (Nit, Nombre, Direccion, Telefono) VALUES
+    (N'12345679', N'Comercial La Esquina', N'6a. avenida 10-20, zona 1', N'+50222330101'),
+    (N'8899001K', N'Ferretería El Martillo', N'Mixco', NULL);
+GO
+
+-- ---------- Apertura del ERP (una sola vez) ----------
+-- Da costo a los productos que no lo tienen, registra la existencia inicial en el kardex y la partida de
+-- apertura (bancos e inventario contra capital), para que inventario y contabilidad arranquen cuadrados.
+IF NOT EXISTS (SELECT 1 FROM dbo.Partidas WHERE Origen = N'APERTURA')
+BEGIN
+    BEGIN TRANSACTION;
+
+    UPDATE dbo.Productos SET CostoPromedio = ROUND(Precio / 1.12 * 0.60, 2) WHERE CostoPromedio = 0;
+    UPDATE dbo.Productos SET StockMinimo = 5 WHERE StockMinimo = 0;
+
+    -- Ventas anteriores al ERP: costo aproximado al costo inicial (no tienen partida: son previas a la apertura).
+    UPDATE d SET CostoUnitario = p.CostoPromedio
+      FROM dbo.PedidoDetalle d JOIN dbo.Productos p ON p.Id = d.ProductoId
+     WHERE d.CostoUnitario = 0;
+    UPDATE pe SET Costo = x.Costo
+      FROM dbo.Pedidos pe
+      JOIN (SELECT PedidoId, SUM(ROUND(Cantidad * CostoUnitario, 2)) AS Costo FROM dbo.PedidoDetalle GROUP BY PedidoId) x
+        ON x.PedidoId = pe.Id
+     WHERE pe.Costo = 0;
+
+    INSERT INTO dbo.MovimientosInventario (ProductoId, Fecha, Tipo, Cantidad, CostoUnitario, Saldo, CostoPromedio, Referencia, UsuarioId)
+    SELECT Id, SYSUTCDATETIME(), N'INICIAL', Stock, CostoPromedio, Stock, CostoPromedio, N'Inventario inicial', NULL
+      FROM dbo.Productos
+     WHERE Stock > 0;
+
+    DECLARE @inventario DECIMAL(18,2) = (SELECT COALESCE(SUM(ROUND(Stock * CostoPromedio, 2)), 0) FROM dbo.Productos);
+    DECLARE @bancos DECIMAL(18,2) = 100000.00;
+    DECLARE @hoy DATE = CAST(DATEADD(HOUR, -6, SYSUTCDATETIME()) AS DATE);
+
+    INSERT INTO dbo.Partidas (Fecha, Concepto, Origen, ReferenciaId, UsuarioId, CreadoEn, Total)
+    VALUES (@hoy, N'Partida de apertura: saldo inicial en bancos e inventario', N'APERTURA', NULL, NULL, SYSUTCDATETIME(),
+            @bancos + @inventario);
+    DECLARE @partida INT = SCOPE_IDENTITY();
+
+    INSERT INTO dbo.PartidaDetalle (PartidaId, CuentaId, Debe, Haber)
+    SELECT @partida, Id, @bancos, 0 FROM dbo.CuentasContables WHERE Codigo = N'1102'
+    UNION ALL
+    SELECT @partida, Id, @inventario, 0 FROM dbo.CuentasContables WHERE Codigo = N'1103' AND @inventario > 0
+    UNION ALL
+    SELECT @partida, Id, 0, @bancos + @inventario FROM dbo.CuentasContables WHERE Codigo = N'3101';
+
+    COMMIT TRANSACTION;
+END
 GO
 
 -- ---------- Login de la aplicación con permisos mínimos ----------

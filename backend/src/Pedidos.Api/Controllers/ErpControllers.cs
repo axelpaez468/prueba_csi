@@ -1,0 +1,228 @@
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Pedidos.Api.Domain;
+using Pedidos.Api.Dtos;
+using Pedidos.Api.Errors;
+using Pedidos.Api.Security;
+using Pedidos.Api.Services.Erp;
+
+namespace Pedidos.Api.Controllers;
+
+/// <summary>Rango por defecto de los reportes: el mes en curso (hora de Guatemala).</summary>
+internal static class RangoPorDefecto
+{
+    public static (DateOnly Desde, DateOnly Hasta) Resolver(DateOnly? desde, DateOnly? hasta, TimeProvider time)
+    {
+        var hoy = Calendario.Hoy(time);
+        var fin = hasta ?? hoy;
+        return (desde ?? new DateOnly(fin.Year, fin.Month, 1), fin);
+    }
+}
+
+[ApiController]
+[Route("api/clientes")]
+[Authorize(Roles = Roles.GestionClientes)]
+public class ClientesController : ControllerBase
+{
+    private readonly TercerosService _terceros;
+
+    public ClientesController(TercerosService terceros) => _terceros = terceros;
+
+    [HttpGet]
+    public Task<List<ClienteResponse>> Listar([FromQuery] string? buscar, [FromQuery] bool inactivos, CancellationToken ct) =>
+        _terceros.ListarClientesAsync(buscar, inactivos, ct);
+
+    [HttpPost]
+    [ProducesResponseType<ClienteResponse>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ErrorResponse>(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Crear(GuardarClienteRequest request, CancellationToken ct) =>
+        StatusCode(StatusCodes.Status201Created, await _terceros.CrearClienteAsync(request, ct));
+
+    [HttpPut("{id:int}")]
+    public Task<ClienteResponse> Editar(int id, GuardarClienteRequest request, CancellationToken ct) =>
+        _terceros.EditarClienteAsync(id, request, ct);
+}
+
+[ApiController]
+[Route("api/inventario")]
+[Authorize(Roles = Roles.ConsultaInventario)]
+public class InventarioController : ControllerBase
+{
+    private readonly InventarioService _inventario;
+
+    public InventarioController(InventarioService inventario) => _inventario = inventario;
+
+    [HttpGet("productos")]
+    public Task<List<ProductoInventarioResponse>> Listar([FromQuery] string? buscar, [FromQuery] bool bajoMinimo,
+        CancellationToken ct) => _inventario.ListarAsync(buscar, bajoMinimo, ct);
+
+    [HttpPost("productos")]
+    [Authorize(Roles = Roles.GestionInventario)]
+    [ProducesResponseType<ProductoInventarioResponse>(StatusCodes.Status201Created)]
+    public async Task<IActionResult> Crear(GuardarProductoRequest request, CancellationToken ct) =>
+        StatusCode(StatusCodes.Status201Created, await _inventario.CrearAsync(request, ct));
+
+    [HttpPut("productos/{id:int}")]
+    [Authorize(Roles = Roles.GestionInventario)]
+    public Task<ProductoInventarioResponse> Editar(int id, GuardarProductoRequest request, CancellationToken ct) =>
+        _inventario.EditarAsync(id, request, ct);
+
+    [HttpGet("productos/{id:int}/kardex")]
+    public Task<KardexResponse> Kardex(int id, CancellationToken ct) => _inventario.KardexAsync(id, ct);
+
+    [HttpPost("ajustes")]
+    [Authorize(Roles = Roles.GestionInventario)]
+    [ProducesResponseType<MovimientoResponse>(StatusCodes.Status201Created)]
+    public async Task<IActionResult> Ajustar(AjusteInventarioRequest request, CancellationToken ct) =>
+        StatusCode(StatusCodes.Status201Created, await _inventario.AjustarAsync(request, User.GetUsuarioId(), ct));
+}
+
+[ApiController]
+[Route("api/compras")]
+[Authorize(Roles = Roles.ConsultaCompras)]
+public class ComprasController : ControllerBase
+{
+    private readonly TercerosService _terceros;
+    private readonly CompraService _compras;
+
+    public ComprasController(TercerosService terceros, CompraService compras)
+    {
+        _terceros = terceros;
+        _compras = compras;
+    }
+
+    [HttpGet("proveedores")]
+    public Task<List<ProveedorResponse>> ListarProveedores([FromQuery] string? buscar, [FromQuery] bool inactivos,
+        CancellationToken ct) => _terceros.ListarProveedoresAsync(buscar, inactivos, ct);
+
+    [HttpPost("proveedores")]
+    [Authorize(Roles = Roles.GestionCompras)]
+    [ProducesResponseType<ProveedorResponse>(StatusCodes.Status201Created)]
+    public async Task<IActionResult> CrearProveedor(GuardarProveedorRequest request, CancellationToken ct) =>
+        StatusCode(StatusCodes.Status201Created, await _terceros.CrearProveedorAsync(request, ct));
+
+    [HttpPut("proveedores/{id:int}")]
+    [Authorize(Roles = Roles.GestionCompras)]
+    public Task<ProveedorResponse> EditarProveedor(int id, GuardarProveedorRequest request, CancellationToken ct) =>
+        _terceros.EditarProveedorAsync(id, request, ct);
+
+    [HttpGet("ordenes")]
+    public Task<List<OrdenResumenResponse>> ListarOrdenes([FromQuery] string? estado, CancellationToken ct) =>
+        _compras.ListarAsync(estado, ct);
+
+    [HttpGet("ordenes/{id:int}")]
+    [ProducesResponseType<OrdenResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ErrorResponse>(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ObtenerOrden(int id, CancellationToken ct) =>
+        await _compras.ObtenerAsync(id, ct) is { } o ? Ok(o) : NotFound(new ErrorResponse("Orden de compra no encontrada."));
+
+    [HttpPost("ordenes")]
+    [Authorize(Roles = Roles.GestionCompras)]
+    [ProducesResponseType<OrdenResponse>(StatusCodes.Status201Created)]
+    public async Task<IActionResult> CrearOrden(CrearOrdenRequest request, CancellationToken ct)
+    {
+        var orden = await _compras.CrearAsync(request, User.GetUsuarioId(), ct);
+        return CreatedAtAction(nameof(ObtenerOrden), new { id = orden.Numero }, orden);
+    }
+
+    [HttpPost("ordenes/{id:int}/recibir")]
+    [Authorize(Roles = Roles.RecepcionCompras)]
+    public Task<OrdenResponse> Recibir(int id, RecibirOrdenRequest request, CancellationToken ct) =>
+        _compras.RecibirAsync(id, request, User.GetUsuarioId(), ct);
+
+    [HttpPost("ordenes/{id:int}/anular")]
+    [Authorize(Roles = Roles.GestionCompras)]
+    public Task<OrdenResponse> Anular(int id, CancellationToken ct) => _compras.AnularAsync(id, ct);
+}
+
+[ApiController]
+[Route("api/contabilidad")]
+[Authorize(Roles = Roles.Contabilidad)]
+public class ContabilidadController : ControllerBase
+{
+    private readonly ContabilidadService _contabilidad;
+    private readonly TimeProvider _time;
+
+    public ContabilidadController(ContabilidadService contabilidad, TimeProvider time)
+    {
+        _contabilidad = contabilidad;
+        _time = time;
+    }
+
+    [HttpGet("cuentas")]
+    public Task<List<CuentaResponse>> ListarCuentas(CancellationToken ct) => _contabilidad.ListarCuentasAsync(ct);
+
+    [HttpPost("cuentas")]
+    [ProducesResponseType<CuentaResponse>(StatusCodes.Status201Created)]
+    public async Task<IActionResult> CrearCuenta(GuardarCuentaRequest request, CancellationToken ct) =>
+        StatusCode(StatusCodes.Status201Created, await _contabilidad.CrearCuentaAsync(request, ct));
+
+    [HttpPut("cuentas/{id:int}")]
+    public Task<CuentaResponse> EditarCuenta(int id, GuardarCuentaRequest request, CancellationToken ct) =>
+        _contabilidad.EditarCuentaAsync(id, request, ct);
+
+    /// <summary>Libro diario. Sin fechas: el mes en curso.</summary>
+    [HttpGet("partidas")]
+    public Task<List<PartidaResponse>> LibroDiario([FromQuery] DateOnly? desde, [FromQuery] DateOnly? hasta,
+        [FromQuery] string? origen, CancellationToken ct)
+    {
+        var (d, h) = RangoPorDefecto.Resolver(desde, hasta, _time);
+        return _contabilidad.LibroDiarioAsync(d, h, origen, ct);
+    }
+
+    [HttpGet("partidas/{id:int}")]
+    [ProducesResponseType<PartidaResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ErrorResponse>(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ObtenerPartida(int id, CancellationToken ct) =>
+        await _contabilidad.ObtenerPartidaAsync(id, ct) is { } p ? Ok(p) : NotFound(new ErrorResponse("Partida no encontrada."));
+
+    /// <summary>Partida manual (gastos, aportes de capital, etc.). Debe cuadrar.</summary>
+    [HttpPost("partidas")]
+    [ProducesResponseType<PartidaResponse>(StatusCodes.Status201Created)]
+    public async Task<IActionResult> CrearPartida(CrearPartidaRequest request, CancellationToken ct)
+    {
+        var partida = await _contabilidad.CrearManualAsync(request, User.GetUsuarioId(), ct);
+        return CreatedAtAction(nameof(ObtenerPartida), new { id = partida.Numero }, partida);
+    }
+
+    [HttpGet("reportes/mayor/{cuentaId:int}")]
+    public Task<LibroMayorResponse> LibroMayor(int cuentaId, [FromQuery] DateOnly? desde, [FromQuery] DateOnly? hasta,
+        CancellationToken ct)
+    {
+        var (d, h) = RangoPorDefecto.Resolver(desde, hasta, _time);
+        return _contabilidad.LibroMayorAsync(cuentaId, d, h, ct);
+    }
+
+    [HttpGet("reportes/balance-comprobacion")]
+    public Task<BalanceComprobacionResponse> BalanceComprobacion([FromQuery] DateOnly? desde, [FromQuery] DateOnly? hasta,
+        CancellationToken ct)
+    {
+        var (d, h) = RangoPorDefecto.Resolver(desde, hasta, _time);
+        return _contabilidad.BalanceComprobacionAsync(d, h, ct);
+    }
+
+    [HttpGet("reportes/estado-resultados")]
+    public Task<EstadoResultadosResponse> EstadoResultados([FromQuery] DateOnly? desde, [FromQuery] DateOnly? hasta,
+        CancellationToken ct)
+    {
+        var (d, h) = RangoPorDefecto.Resolver(desde, hasta, _time);
+        return _contabilidad.EstadoResultadosAsync(d, h, ct);
+    }
+
+    [HttpGet("reportes/balance-general")]
+    public Task<BalanceGeneralResponse> BalanceGeneral([FromQuery] DateOnly? al, CancellationToken ct) =>
+        _contabilidad.BalanceGeneralAsync(al ?? Calendario.Hoy(_time), ct);
+}
+
+[ApiController]
+[Route("api/panel")]
+[Authorize(Roles = Roles.Panel)]
+public class PanelController : ControllerBase
+{
+    private readonly PanelService _panel;
+
+    public PanelController(PanelService panel) => _panel = panel;
+
+    [HttpGet]
+    public Task<PanelResponse> Resumen(CancellationToken ct) => _panel.ResumenAsync(ct);
+}

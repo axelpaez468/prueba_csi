@@ -59,6 +59,13 @@ builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<PedidoService>();
 
+// ERP: clientes y proveedores, inventario, compras, contabilidad y panel.
+builder.Services.AddScoped<Pedidos.Api.Services.Erp.ContabilidadService>();
+builder.Services.AddScoped<Pedidos.Api.Services.Erp.TercerosService>();
+builder.Services.AddScoped<Pedidos.Api.Services.Erp.InventarioService>();
+builder.Services.AddScoped<Pedidos.Api.Services.Erp.CompraService>();
+builder.Services.AddScoped<Pedidos.Api.Services.Erp.PanelService>();
+
 // Login de ERP: 2FA, recuperación de contraseña, bitácora y notificaciones.
 builder.Services.AddSingleton<Cifrador>();
 builder.Services.AddSingleton<TotpService>();

@@ -196,9 +196,10 @@ public partial class UsuarioService
             throw new BusinessRuleException("No puedes eliminar tu propia cuenta.");
         if (usuario.Rol == Roles.Admin)
             await ExigirOtroAdminActivoAsync(id, ct);
-        if (await _db.Pedidos.AnyAsync(p => p.UsuarioId == id, ct))
+        if (await TieneHistorialAsync(id, ct))
             throw new BusinessRuleException(
-                "El usuario tiene pedidos registrados y no se puede eliminar. Desactívalo para quitarle el acceso.");
+                "El usuario tiene operaciones registradas (ventas, compras, movimientos o partidas) y no se puede eliminar. " +
+                "Desactívalo para quitarle el acceso.");
 
         var descripcion = Describir(usuario);
         _db.Usuarios.Remove(usuario); // códigos, tokens y dispositivos se borran en cascada
@@ -229,8 +230,8 @@ public partial class UsuarioService
             throw new BusinessRuleException("El teléfono debe tener 8 dígitos de Guatemala (se antepone +502), por ejemplo 5555 0101.");
         if (!RegexCodigo().IsMatch(codigo))
             throw new BusinessRuleException("El código corporativo debe tener de 3 a 20 letras, números o guiones (p. ej. VEN-0002).");
-        if (rol != Roles.Vendedor && rol != Roles.Admin)
-            throw new BusinessRuleException("El rol debe ser VENDEDOR o ADMIN.");
+        if (!Roles.Todos.Contains(rol))
+            throw new BusinessRuleException("El rol debe ser " + string.Join(", ", Roles.Todos) + ".");
 
         if (await _db.Usuarios.AnyAsync(u => u.Email == email && u.Id != idExistente, ct))
             throw new BusinessRuleException("Ya existe un usuario con ese correo.");
@@ -248,6 +249,13 @@ public partial class UsuarioService
     private async Task<Usuario> CargarAsync(int id, CancellationToken ct) =>
         await _db.Usuarios.FirstOrDefaultAsync(u => u.Id == id, ct)
         ?? throw new NoEncontradoException("Usuario no encontrado.");
+
+    /// <summary>Cualquier documento firmado por el usuario: se conserva para la auditoría.</summary>
+    private async Task<bool> TieneHistorialAsync(int id, CancellationToken ct) =>
+        await _db.Pedidos.AnyAsync(p => p.UsuarioId == id, ct)
+        || await _db.OrdenesCompra.AnyAsync(o => o.UsuarioId == id || o.RecibidaPorId == id, ct)
+        || await _db.MovimientosInventario.AnyAsync(m => m.UsuarioId == id, ct)
+        || await _db.Partidas.AnyAsync(p => p.UsuarioId == id, ct);
 
     private async Task ExigirOtroAdminActivoAsync(int excepto, CancellationToken ct)
     {
