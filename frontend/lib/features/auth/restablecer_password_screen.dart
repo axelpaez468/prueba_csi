@@ -8,10 +8,14 @@ import '../../data/repositories/auth_repository.dart';
 import 'auth_layout.dart';
 
 /// Se abre desde el enlace del correo (?restablecer=TOKEN) para definir una nueva contraseña.
+/// Con la invitación de un usuario nuevo (&invitacion=1) es la bienvenida: crea su primera contraseña.
 class RestablecerPasswordScreen extends StatefulWidget {
-  const RestablecerPasswordScreen({super.key, required this.token, required this.alTerminar});
+  const RestablecerPasswordScreen({super.key, required this.token, required this.alTerminar, this.esInvitacion = false});
 
   final String token;
+
+  /// Usuario invitado por el administrador que aún no tiene contraseña.
+  final bool esInvitacion;
 
   /// Vuelve al inicio de sesión (tras restablecer o si el enlace no sirve).
   final VoidCallback alTerminar;
@@ -57,8 +61,10 @@ class _RestablecerPasswordScreenState extends State<RestablecerPasswordScreen> {
     if (_exito != null) {
       return AuthTarjeta(
         icono: Icons.check_circle_outline,
-        titulo: 'Contraseña actualizada',
-        subtitulo: _exito!,
+        titulo: widget.esInvitacion ? 'Cuenta activada' : 'Contraseña actualizada',
+        subtitulo: widget.esInvitacion
+            ? 'Ya puedes iniciar sesión con tu correo y tu contraseña. Ten a mano Google Authenticator para configurarlo.'
+            : _exito!,
         child: FilledButton(
           key: const Key('ir-a-login'),
           style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
@@ -70,8 +76,10 @@ class _RestablecerPasswordScreenState extends State<RestablecerPasswordScreen> {
 
     return AuthTarjeta(
       icono: Icons.password,
-      titulo: 'Crea una nueva contraseña',
-      subtitulo: 'Al guardarla se cerrarán las sesiones abiertas en otros dispositivos.',
+      titulo: widget.esInvitacion ? 'Bienvenido: crea tu contraseña' : 'Crea una nueva contraseña',
+      subtitulo: widget.esInvitacion
+          ? 'Con tu correo y esta contraseña iniciarás sesión en el Sistema de Pedidos.'
+          : 'Al guardarla se cerrarán las sesiones abiertas en otros dispositivos.',
       alVolver: widget.alTerminar,
       child: Form(
         key: _formKey,
@@ -84,7 +92,7 @@ class _RestablecerPasswordScreenState extends State<RestablecerPasswordScreen> {
               enabled: !_enviando,
               autofillHints: const [AutofillHints.newPassword],
               decoration: InputDecoration(
-                hintText: 'Nueva contraseña',
+                hintText: widget.esInvitacion ? 'Contraseña' : 'Nueva contraseña',
                 prefixIcon: const Icon(Icons.lock_outline),
                 suffixIcon: IconButton(
                   tooltip: _ocultar ? 'Mostrar' : 'Ocultar',

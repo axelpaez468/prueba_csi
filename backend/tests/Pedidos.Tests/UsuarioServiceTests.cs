@@ -54,6 +54,11 @@ public class UsuarioServiceTests : IDisposable
         var despues = await _s.EntrarAsync(_testDb, "ana.lopez@empresa.gt", "Mi-Clave-Nueva-2026");
         Assert.NotNull(despues);
         Assert.Equal("Ana María López", despues.Username);
+
+        // El enlace abre la bienvenida y, al crear la contraseña, llega "cuenta activa" (no "contraseña cambiada").
+        Assert.Contains("&invitacion=1", _s.Correo.Enviados.Single(m => m.Asunto.Contains("Bienvenido")).Texto);
+        Assert.Contains(_s.Correo.Enviados, m => m.Para == "ana.lopez@empresa.gt" && m.Asunto == "Tu cuenta está activa");
+        Assert.DoesNotContain(_s.Correo.Enviados, m => m.Asunto == "Tu contraseña fue cambiada");
     }
 
     [Theory]

@@ -210,6 +210,12 @@ void main() {
         expect(find.text('Guardar contraseña'), findsOneWidget);
       });
 
+      testWidgets('invitación: crear la primera contraseña', (tester) async {
+        await _montar(tester, tamano, RestablecerPasswordScreen(token: 't', esInvitacion: true, alTerminar: () {}),
+            sesion: _Sesion.anonima);
+        expect(find.text('Bienvenido: crea tu contraseña'), findsOneWidget);
+      });
+
       testWidgets('catálogo', (tester) async {
         await _montar(tester, tamano, const CatalogScreen());
         expect(find.text('Teclado mecánico'), findsOneWidget);

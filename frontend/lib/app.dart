@@ -44,6 +44,9 @@ class _PedidosAppState extends State<PedidosApp> {
   /// Token del enlace "restablecer contraseña" del correo (http://.../?restablecer=TOKEN).
   String? _tokenRestablecer = Uri.base.queryParameters['restablecer'];
 
+  /// El enlace es la invitación de un usuario nuevo (&invitacion=1): la pantalla da la bienvenida.
+  final bool _esInvitacion = Uri.base.queryParameters['invitacion'] == '1';
+
   @override
   void initState() {
     super.initState();
@@ -103,7 +106,7 @@ class _PedidosAppState extends State<PedidosApp> {
             // El enlace del correo abre siempre esta pantalla, aunque haya una sesión abierta en el navegador.
             final token = _tokenRestablecer;
             if (token != null) {
-              return RestablecerPasswordScreen(token: token, alTerminar: () => setState(() => _tokenRestablecer = null));
+              return RestablecerPasswordScreen(token: token, esInvitacion: _esInvitacion, alTerminar: () => setState(() => _tokenRestablecer = null));
             }
             final codigos = session.codigosRespaldoNuevos;
             if (session.status == SessionStatus.authenticated && codigos != null) {

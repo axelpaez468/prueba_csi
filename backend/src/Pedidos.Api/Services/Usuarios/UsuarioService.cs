@@ -55,10 +55,12 @@ public partial class UsuarioService
 
     public static UsuarioResponse Mapear(Usuario u) => new(
         u.Id, u.Nombre, u.Apellido, u.Username, u.Email, u.Telefono ?? "", u.CodigoCorporativo, u.Rol, u.Activo,
-        u.DosFactor, TieneContrasena: !u.PasswordHash.StartsWith(MarcaSinContrasena), u.CreadoEn);
+        u.DosFactor, TieneContrasena: TieneContrasena(u), u.CreadoEn);
 
     /// <summary>Prefijo del hash de un usuario invitado que aún no definió su contraseña (ningún texto lo verifica).</summary>
-    private const string MarcaSinContrasena = "!sin-contrasena!";
+    internal const string MarcaSinContrasena = "!sin-contrasena!";
+
+    public static bool TieneContrasena(Usuario u) => !u.PasswordHash.StartsWith(MarcaSinContrasena);
 
     // ---------- Consultas ----------
 

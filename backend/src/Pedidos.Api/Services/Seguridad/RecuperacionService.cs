@@ -5,6 +5,7 @@ using Pedidos.Api.Domain;
 using Pedidos.Api.Errors;
 using Pedidos.Api.Notificaciones;
 using Pedidos.Api.Security;
+using Pedidos.Api.Services.Usuarios;
 
 namespace Pedidos.Api.Services.Seguridad;
 
@@ -73,7 +74,9 @@ public class RecuperacionService
     /// <summary>Correo de bienvenida para un usuario creado por el administrador: define su contraseña con el enlace.</summary>
     public async Task EnviarInvitacionAsync(Usuario usuario, ContextoCliente ctx, CancellationToken ct)
     {
-        var enlace = await CrearEnlaceAsync(usuario.Id, VigenciaInvitacion, ct);
+        // Si aún no tiene contraseña, el enlace abre la pantalla de bienvenida ("crea tu contraseña").
+        var enlace = await CrearEnlaceAsync(usuario.Id, VigenciaInvitacion, ct,
+            invitacion: !UsuarioService.TieneContrasena(usuario));
         await _db.SaveChangesAsync(ct);
         _correo.Encolar(usuario.Email, "Bienvenido al Sistema de Pedidos",
             $"Hola {usuario.Nombre}:\n\nSe creó tu cuenta en el Sistema de Pedidos.\n\n" +
@@ -90,7 +93,8 @@ public class RecuperacionService
     /// Solo un enlace vigente por usuario: crear uno invalida los anteriores. En la BD se guarda solo la huella
     /// del token, así que una filtración de la BD no sirve para usar el enlace.
     /// </summary>
-    private async Task<string> CrearEnlaceAsync(int usuarioId, TimeSpan vigencia, CancellationToken ct)
+    private async Task<string> CrearEnlaceAsync(int usuarioId, TimeSpan vigencia, CancellationToken ct,
+        bool invitacion = false)
     {
         await _db.TokensRecuperacion
             .Where(t => t.UsuarioId == usuarioId && t.UsadoEn == null)
@@ -104,7 +108,7 @@ public class RecuperacionService
             CreadoEn = Ahora,
             ExpiraEn = Ahora + vigencia
         });
-        return $"{_frontend.UrlPublica.TrimEnd('/')}/?restablecer={token}";
+        return $"{_frontend.UrlPublica.TrimEnd('/')}/?restablecer={token}" + (invitacion ? "&invitacion=1" : "");
     }
 
     public async Task RestablecerAsync(string token, string nuevaPassword, ContextoCliente ctx, CancellationToken ct)
@@ -121,10 +125,19 @@ public class RecuperacionService
         if (error is not null)
             throw new BusinessRuleException(error);
 
+        var activacion = !UsuarioService.TieneContrasena(usuario);
         registro.UsadoEn = Ahora;
         await AplicarNuevaPasswordAsync(_db, usuario, nuevaPassword, ct);
         _bitacora.Registrar(EventosBitacora.PasswordRestablecida, true, usuario.Email, ctx, usuario.Id);
         await _db.SaveChangesAsync(ct);
+
+        if (activacion)
+        {
+            _correo.Encolar(usuario.Email, "Tu cuenta está activa",
+                $"Hola {usuario.Nombre}:\n\nCreaste tu contraseña y tu cuenta del Sistema de Pedidos quedó activa. " +
+                "Al iniciar sesión configurarás Google Authenticator.\n\nSi no fuiste tú, contacta al administrador de inmediato.");
+            return;
+        }
 
         _correo.Encolar(usuario.Email, "Tu contraseña fue cambiada",
             $"Hola {usuario.Username}:\n\nLa contraseña de tu cuenta se restableció el {Ahora:dd/MM/yyyy HH:mm} UTC. " +
