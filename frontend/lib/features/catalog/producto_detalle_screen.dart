@@ -12,7 +12,7 @@ import '../auth/session_controller.dart';
 import '../cart/cart_controller.dart';
 import '../cart/cart_screen.dart';
 import '../shell/app_top_bar.dart';
-import 'producto_imagen.dart';
+import 'carruseles.dart';
 
 /// Ficha del producto: foto, precio, existencia, descripción detallada, especificaciones y garantía.
 /// El vendedor puede agregarlo al carrito desde aquí.
@@ -59,10 +59,9 @@ class _ProductoDetalleScreenState extends State<ProductoDetalleScreen>
     final enCarrito = context.watch<CartController>().cantidadDe(p.id);
     final maximo = p.stock - enCarrito;
 
-    final foto = ClipRRect(
-      borderRadius: BorderRadius.circular(14),
-      child: AspectRatio(aspectRatio: 4 / 3, child: ProductoImagen(producto: p, tamanoIcono: 72)),
-    );
+    // Mientras llega la ficha se muestra la foto principal; luego, la galería completa.
+    final imagenes = detalle?.imagenes ?? [?p.imagenId];
+    final foto = CarruselImagenes(key: ValueKey(imagenes.length), producto: p, imagenes: imagenes);
 
     final resumen = Column(
       crossAxisAlignment: CrossAxisAlignment.start,

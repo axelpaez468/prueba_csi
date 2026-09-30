@@ -12,6 +12,7 @@ import '../contabilidad/reportes_screen.dart';
 import '../cuenta/bitacora_screen.dart';
 import '../inventario/inventario_screen.dart';
 import '../panel/panel_screen.dart';
+import '../productos/productos_screen.dart';
 import '../usuarios/usuarios_screen.dart';
 import '../ventas/reporte_ventas_screen.dart';
 import '../ventas/ventas_screen.dart';
@@ -36,6 +37,8 @@ final modulos = <Modulo>[
       () => const ReporteVentasScreen(), (s) => s.consultaVentas),
   Modulo('Clientes', 'NIT y datos de facturación', Icons.people_alt_outlined, 'Ventas', () => const ClientesScreen(),
       (s) => s.gestionaClientes),
+  Modulo('Productos', 'Alta, ficha, fotos y baja', Icons.category_outlined, 'Inventario', () => const ProductosScreen(),
+      (s) => s.gestionaInventario),
   Modulo('Inventario', 'Existencias, costos y kardex', Icons.inventory_2_outlined, 'Inventario', () => const InventarioScreen(),
       (s) => s.consultaInventario),
   Modulo('Órdenes de compra', 'Pedidos a proveedores y recepción', Icons.local_shipping_outlined, 'Compras',

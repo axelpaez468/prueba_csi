@@ -7,6 +7,7 @@ class Producto {
     required this.stock,
     this.marca,
     this.categoria,
+    this.imagenId,
   });
 
   final int id;
@@ -19,6 +20,9 @@ class Producto {
   final String? marca;
   final String? categoria;
 
+  /// Foto principal; null si el producto no tiene fotos (se muestra una ilustración).
+  final int? imagenId;
+
   bool get disponible => stock > 0;
 
   factory Producto.fromJson(Map<String, dynamic> json) => Producto(
@@ -29,6 +33,7 @@ class Producto {
         stock: json['stock'] as int,
         marca: json['marca'] as String?,
         categoria: json['categoria'] as String?,
+        imagenId: json['imagenId'] as int?,
       );
 }
 
@@ -55,6 +60,7 @@ class ProductoDetalle {
     this.descripcion,
     required this.garantiaMeses,
     required this.especificaciones,
+    this.imagenes = const [],
   });
 
   final Producto producto;
@@ -62,11 +68,15 @@ class ProductoDetalle {
   final int garantiaMeses;
   final List<Especificacion> especificaciones;
 
+  /// Ids de las fotos, en orden (la primera es la principal).
+  final List<int> imagenes;
+
   factory ProductoDetalle.fromJson(Map<String, dynamic> j) => ProductoDetalle(
         producto: Producto.fromJson(j),
         descripcion: j['descripcion'] as String?,
         garantiaMeses: (j['garantiaMeses'] as int?) ?? 0,
         especificaciones: Especificacion.lista(j['especificaciones']),
+        imagenes: ((j['imagenes'] as List?) ?? const []).cast<int>(),
       );
 }
 

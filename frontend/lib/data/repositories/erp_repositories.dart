@@ -38,6 +38,19 @@ class InventarioRepository {
   Future<Kardex> kardex(int productoId) async =>
       Kardex.fromJson(await _api.get('$_base/productos/$productoId/kardex') as Map<String, dynamic>);
 
+  Future<void> eliminar(int productoId) => _api.delete('$_base/productos/$productoId');
+
+  /// Devuelven los ids de las fotos del producto, ya en su nuevo orden.
+  Future<List<int>> subirImagen(int productoId, List<int> bytes, String nombre) async =>
+      ((await _api.postArchivo('$_base/productos/$productoId/imagenes', 'archivo', bytes, nombre)) as List).cast<int>();
+
+  Future<List<int>> eliminarImagen(int productoId, int imagenId) async =>
+      ((await _api.delete('$_base/productos/$productoId/imagenes/$imagenId')) as List).cast<int>();
+
+  Future<List<int>> imagenPrincipal(int productoId, int imagenId) async => ((await _api.post(
+          '$_base/productos/$productoId/imagenes/$imagenId/principal', const <String, dynamic>{})) as List)
+      .cast<int>();
+
   Future<MovimientoInventario> ajustar(Map<String, dynamic> datos) async =>
       MovimientoInventario.fromJson(await _api.post('$_base/ajustes', datos) as Map<String, dynamic>);
 }

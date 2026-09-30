@@ -7,6 +7,7 @@ import '../cart/cart_controller.dart';
 import '../cart/cart_screen.dart';
 import '../shell/app_top_bar.dart';
 import 'catalog_controller.dart';
+import 'carruseles.dart';
 import 'producto_detalle_screen.dart';
 import 'producto_tile.dart';
 
@@ -88,6 +89,24 @@ class _CatalogScreenState extends State<CatalogScreen> {
                 ),
               ),
             ),
+            if (termino.isEmpty && _categoria == null && catalogo.items.length > 1)
+              SliverToBoxAdapter(
+                child: PageBody(
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(compacto ? 16 : 24, 0, compacto ? 16 : 24, 20),
+                    child: CarruselDestacados(
+                      // Primero los que tienen foto y existencia.
+                      productos: ([...catalogo.items]
+                            ..sort((a, b) => (b.disponible ? 2 : 0) + (b.imagenId != null ? 1 : 0) -
+                                ((a.disponible ? 2 : 0) + (a.imagenId != null ? 1 : 0))))
+                          .take(8)
+                          .toList(),
+                      alAbrir: (p) =>
+                          Navigator.of(context).push(MaterialPageRoute(builder: (_) => ProductoDetalleScreen(producto: p))),
+                    ),
+                  ),
+                ),
+              ),
             if (categorias.length > 1)
               SliverToBoxAdapter(
                 child: PageBody(

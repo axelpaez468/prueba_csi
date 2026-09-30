@@ -38,6 +38,7 @@ import 'package:pedidos_app/features/cuenta/seguridad_screen.dart';
 import 'package:pedidos_app/features/inventario/inventario_dialogs.dart';
 import 'package:pedidos_app/features/inventario/inventario_screen.dart';
 import 'package:pedidos_app/features/panel/panel_screen.dart';
+import 'package:pedidos_app/features/productos/productos_screen.dart';
 import 'package:pedidos_app/features/order/order_confirmation_screen.dart';
 import 'package:pedidos_app/features/usuarios/usuario_form_dialog.dart';
 import 'package:pedidos_app/features/usuarios/usuarios_screen.dart';
@@ -93,6 +94,7 @@ Map<String, dynamic> _productoInv(int i) => {
       'activo': i != 5,
       'bajoMinimo': i == 3,
       'margen': 40.1,
+      'imagenes': [for (var j = 1; j <= (i % 3) * 2; j++) j],
     };
 
 final _cuentas = [
@@ -134,7 +136,7 @@ Map<String, dynamic> _resumenVentas(double total) => {
 Object? _respuestaErp(String ruta) => switch (ruta) {
       '/api/productos/1' => {
           'id': 1, 'codigo': 'P-001', 'nombre': 'Teclado mecánico con un nombre largo', 'precio': 450, 'stock': 2,
-          'marca': 'KeyForge', 'categoria': 'Periféricos', 'garantiaMeses': 12,
+          'marca': 'KeyForge', 'categoria': 'Periféricos', 'garantiaMeses': 12, 'imagenes': [1, 2, 3, 4, 5],
           'descripcion': 'Teclado mecánico de tamaño completo pensado para jornadas largas.\n\nIncluye reposamuñecas y cable USB-C.',
           'especificaciones': [
             {'nombre': 'Interruptores', 'valor': 'Mecánicos lineales rojos, 45 g, 50 millones de pulsaciones'},
@@ -412,7 +414,8 @@ void main() {
 
       testWidgets('catálogo', (tester) async {
         await _montar(tester, tamano, const CatalogScreen());
-        expect(find.text('Teclado mecánico'), findsOneWidget);
+        expect(find.text('Teclado mecánico'), findsWidgets); // en el carrusel de destacados y en la cuadrícula
+        expect(find.byKey(const Key('carrusel-destacados')), findsOneWidget);
       });
 
       testWidgets('carrito', (tester) async {
@@ -535,6 +538,29 @@ void main() {
         await _montar(tester, tamano, ProductoDetalleScreen(producto: _productos[0]));
         expect(find.text('Especificaciones técnicas'), findsOneWidget);
         expect(find.text('1 año de garantía'), findsOneWidget);
+        expect(find.byKey(const Key('carrusel-imagenes')), findsOneWidget);
+        expect(find.text('1 / 5'), findsOneWidget);
+        await tester.tap(find.byIcon(Icons.chevron_right).first);
+        await tester.pumpAndSettle();
+        expect(find.text('2 / 5'), findsOneWidget);
+        // Avance automático: a los 4 segundos pasa sola a la siguiente foto.
+        await tester.pump(const Duration(seconds: 4));
+        await tester.pumpAndSettle();
+        expect(find.text('3 / 5'), findsOneWidget);
+      });
+
+      testWidgets('productos (CRUD)', (tester) async {
+        await _montar(tester, tamano, const ProductosScreen());
+        expect(find.text('Productos'), findsWidgets);
+        expect(find.text('2/5'), findsWidgets);
+        expect(find.text('Inactivo'), findsOneWidget);
+      });
+
+      testWidgets('galería de fotos del producto', (tester) async {
+        await _montar(tester, tamano,
+            Scaffold(body: GaleriaDialog(producto: ProductoInventario.fromJson({..._productoInv(1), 'imagenes': [1, 2, 3, 4, 5]}))));
+        expect(find.text('Principal'), findsOneWidget);
+        expect(find.text('Máximo 5 fotos'), findsOneWidget);
       });
 
       testWidgets('formulario de producto con ficha', (tester) async {

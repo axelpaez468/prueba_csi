@@ -35,14 +35,27 @@ class ApiClient {
 
   Future<dynamic> delete(String path) => _send('DELETE', path);
 
-  Future<dynamic> _send(String method, String path, {Object? body, bool authenticated = true}) async {
-    final request = http.Request(method, _baseUri.resolve(path))
-      ..headers['Accept'] = 'application/json';
+  /// Sube un archivo como multipart/form-data en el campo [campo].
+  Future<dynamic> postArchivo(String path, String campo, List<int> bytes, String nombreArchivo) =>
+      _send('POST', path, archivo: (campo, bytes, nombreArchivo));
 
-    if (body != null) {
-      request.headers['Content-Type'] = 'application/json';
-      request.body = jsonEncode(body);
+  Future<dynamic> _send(String method, String path,
+      {Object? body, bool authenticated = true, (String, List<int>, String)? archivo}) async {
+    final http.BaseRequest request;
+    if (archivo != null) {
+      final (campo, bytes, nombre) = archivo;
+      request = http.MultipartRequest(method, _baseUri.resolve(path))
+        ..files.add(http.MultipartFile.fromBytes(campo, bytes, filename: nombre));
+    } else {
+      final r = http.Request(method, _baseUri.resolve(path));
+      if (body != null) {
+        r.headers['Content-Type'] = 'application/json';
+        r.body = jsonEncode(body);
+      }
+      request = r;
     }
+    request.headers['Accept'] = 'application/json';
+
     if (authenticated) {
       final token = await tokenProvider();
       if (token != null) request.headers['Authorization'] = 'Bearer $token';

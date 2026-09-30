@@ -152,6 +152,7 @@ class ProductoInventario {
     this.descripcion,
     this.garantiaMeses = 0,
     this.especificaciones = const [],
+    this.imagenes = const [],
   });
 
   final int id;
@@ -171,6 +172,14 @@ class ProductoInventario {
   final int garantiaMeses;
   final List<Especificacion> especificaciones;
 
+  /// Ids de las fotos, en orden (la primera es la principal).
+  final List<int> imagenes;
+
+  /// Para mostrarlo con los widgets del catálogo (foto, nombre, precio).
+  Producto get comoProducto => Producto(
+      id: id, codigo: codigo, nombre: nombre, precio: precio, stock: stock, marca: marca, categoria: categoria,
+      imagenId: imagenes.isEmpty ? null : imagenes.first);
+
   factory ProductoInventario.fromJson(Map<String, dynamic> j) => ProductoInventario(
         id: j['id'] as int,
         codigo: j['codigo'] as String,
@@ -188,6 +197,7 @@ class ProductoInventario {
         descripcion: j['descripcion'] as String?,
         garantiaMeses: (j['garantiaMeses'] as int?) ?? 0,
         especificaciones: Especificacion.lista(j['especificaciones']),
+        imagenes: ((j['imagenes'] as List?) ?? const []).cast<int>(),
       );
 }
 
