@@ -30,11 +30,13 @@ docker compose up --build
 |---|---|
 | Frontend | http://localhost:8080 |
 | API | http://localhost:5080 |
+| Bandeja de correos y SMS de prueba (Mailpit) | http://localhost:8025 |
 
 - El primer build tarda bastante: descarga SQL Server (unos 1.5 GB), el SDK de .NET y Flutter.
 - La base de datos se crea sola. El contenedor `db` arranca SQL Server, ejecuta `db/init/init.sql` y solo entonces el *healthcheck* lo marca como sano. La API espera a ese estado (`depends_on: service_healthy`).
 - Los datos persisten en el volumen `mssql-data`. Para empezar de cero: `docker compose down -v`.
-- `JWT_KEY` debe tener al menos 32 caracteres; si no, la API no arranca. Para generarla: `openssl rand -base64 48`.
+- `JWT_KEY` debe tener al menos 32 caracteres, y `SEGURIDAD_CLAVE_MAESTRA` debe ser una clave de 32 bytes en Base64; si falta alguna, la API no arranca. Para generarlas: `openssl rand -base64 48` y `openssl rand -base64 32`.
+- Si ya tenías el volumen de una versión anterior y cambió `init.sql`, reinicia la base para que aplique la migración: `docker compose restart db`. El script es idempotente y no borra datos.
 
 ### Sin Docker (desarrollo)
 
@@ -50,6 +52,7 @@ sqlcmd -S ".\SQLEXPRESS" -E -b -I -f 65001 -i db/init/init.sql -v DB_NAME=Pedido
 cd backend
 dotnet user-secrets set "Jwt:Key" "<clave aleatoria de 32+ caracteres>" --project src/Pedidos.Api
 dotnet user-secrets set "ConnectionStrings:Default" "Server=.\SQLEXPRESS;Database=PedidosDb;Trusted_Connection=True;TrustServerCertificate=True" --project src/Pedidos.Api
+dotnet user-secrets set "Seguridad:ClaveMaestra" "<32 bytes en Base64>" --project src/Pedidos.Api
 dotnet run --project src/Pedidos.Api --launch-profile http
 ```
 
@@ -66,13 +69,15 @@ flutter run -d chrome --web-port 8081 --dart-define=API_URL=http://localhost:508
 
 ## 2. Usuarios de prueba
 
-| Usuario | Contraseña | Rol | Puede |
-|---|---|---|---|
-| `vendedor` | `Vendedor123!` | VENDEDOR | Ver el catálogo, crear pedidos y ver **sus** pedidos |
-| `admin` | `Admin123!` | ADMIN | Ver el catálogo y **cualquier** pedido; no crea pedidos |
+| Correo | Contraseña | Rol | 2FA | Puede |
+|---|---|---|---|---|
+| `vendedor@pedidos.local` | `Vendedor123!` | VENDEDOR | No (lo puede activar en "Seguridad de la cuenta") | Ver el catálogo, crear pedidos y ver **sus** pedidos |
+| `admin@pedidos.local` | `AdminPedidos2026!` | ADMIN | **SMS** al `+502 5555 0101` (obligatorio para ADMIN) | Ver cualquier pedido y la bitácora de accesos; no crea pedidos |
+
+**Cómo entrar como admin:** después de la contraseña, el sistema pide un código de 6 dígitos que "llega por SMS". Como es un entorno de prueba, el SMS se simula: ábrelo en **http://localhost:8025** (Mailpit), en el mensaje "📱 SMS a +50255550101". Ahí llegan también los correos de recuperación de contraseña y los avisos de inicio de sesión desde un dispositivo nuevo.
 
 Productos semilla: 5, entre ellos el **Monitor 27" con stock 1**, para probar la concurrencia, y la **Webcam HD con stock 0**, que aparece deshabilitada en el catálogo.
-Son credenciales de prueba y están guardadas como hash BCrypt en `init.sql`.
+Son credenciales de prueba y están guardadas como hash BCrypt en `init.sql`. La contraseña del vendedor es anterior a la política nueva: si se cambia, la nueva debe cumplirla.
 
 ---
 
@@ -85,7 +90,16 @@ Son credenciales de prueba y están guardadas como hash BCrypt en `init.sql`.
 ```bash
 # Login (guarda el token)
 TOKEN=$(curl -s -X POST http://localhost:5080/api/auth/login -H "Content-Type: application/json" \
-  -d '{"username":"vendedor","password":"Vendedor123!"}' | sed -E 's/.*"token":"([^"]+)".*/\1/')
+  -d '{"email":"vendedor@pedidos.local","password":"Vendedor123!"}' | sed -E 's/.*"token":"([^"]+)".*/\1/')
+
+# Login con 2FA (admin): el paso 1 devuelve un desafío y envía el SMS (ver http://localhost:8025)
+DESAFIO=$(curl -s -X POST http://localhost:5080/api/auth/login -H "Content-Type: application/json" \
+  -d '{"email":"admin@pedidos.local","password":"AdminPedidos2026!"}' | sed -E 's/.*"desafio":"([^"]+)".*/\1/')
+curl -s -X POST http://localhost:5080/api/auth/login/verificar -H "Content-Type: application/json" \
+  -d "{\"desafio\":\"$DESAFIO\",\"codigo\":\"<código del SMS>\"}"
+
+# Recuperación de contraseña: el enlace llega a la bandeja de Mailpit
+curl -s -X POST http://localhost:5080/api/auth/recuperar -H "Content-Type: application/json" -d '{"email":"vendedor@pedidos.local"}'
 
 # Catálogo
 curl -i http://localhost:5080/api/productos -H "Authorization: Bearer $TOKEN"
@@ -111,7 +125,13 @@ for i in $(seq 1 10); do curl -s -o /dev/null -w "%{http_code}\n" -X POST http:/
 
 | Método | Ruta | Acceso | Respuestas |
 |---|---|---|---|
-| POST | `/api/auth/login` | Público (10 intentos/min por IP) | 200 `{ token, expiraEn, username, rol }` · 400 · 401 · 429 |
+| POST | `/api/auth/login` | Público (10 intentos/min por IP) | 200 `{ token, expiraEn, username, email, rol }` o, con 2FA, 200 `{ requiereSegundoFactor: true, desafio, metodo, destino }` · 400 · 401 · 429 |
+| POST | `/api/auth/login/verificar` | Público (con el desafío) | 200 sesión (+ `tokenDispositivo` si se pidió confiar en el dispositivo) · 401 código incorrecto · 400 desafío vencido |
+| POST | `/api/auth/login/reenviar` | Público (con el desafío) | 200 · 400 si no pasaron 30 s |
+| POST | `/api/auth/recuperar` | Público (5 cada 15 min por IP) | 202, siempre la misma respuesta (no revela si el correo existe) |
+| POST | `/api/auth/restablecer` | Público (con el token del correo) | 200 · 400 enlace vencido o usado, o contraseña que no cumple la política |
+| GET/POST | `/api/cuenta/...` | Autenticado | Estado de seguridad, cambio de contraseña, activar/desactivar 2FA (TOTP o SMS), códigos de respaldo, accesos propios |
+| GET | `/api/admin/bitacora` | ADMIN | Últimos 100 eventos de seguridad de todos los usuarios |
 | GET | `/api/productos` | Autenticado | 200 `[{ id, codigo, nombre, precio, stock }]` · 401 |
 | POST | `/api/pedidos` | VENDEDOR | 201 `{ numero, fecha, usuarioId, total, lineas[] }` · 400 · 401 · 403 |
 | GET | `/api/pedidos/{id}` | Dueño o ADMIN | 200 · 401 · 404 |
@@ -121,8 +141,8 @@ Todos los errores tienen el mismo formato: `{ "error": "mensaje legible" }`.
 ### Pruebas automatizadas
 
 ```bash
-cd backend && dotnet test      # 23 pruebas (1 se omite si no hay SQL Server; ver abajo)
-cd frontend && flutter test    # 28 pruebas
+cd backend && dotnet test      # 48 pruebas (1 se omite si no hay SQL Server; ver abajo)
+cd frontend && flutter test    # 57 pruebas
 ```
 
 - **Backend:** usa SQLite en memoria, que a diferencia del proveedor InMemory de EF soporta transacciones reales, `ExecuteUpdate` y *check constraints*. Cubre: precio/total calculados en el servidor aunque el cliente los envíe; descuento de stock; rollback completo si una línea falla; última unidad vendida una sola vez; cantidad ≤ 0; producto inexistente; producto duplicado; pedido vacío; pedido ajeno no visible; y login válido/inválido.
@@ -213,6 +233,29 @@ Verificado contra el stack en Docker:
 - un `POST` a nginx devolvió 405.
 
 > **Sobre DDoS:** un ataque distribuido real (miles de IPs, gigabits de tráfico) no se frena dentro de la aplicación: satura la red antes de llegar a ella. En producción se mitiga en el borde (Cloudflare, AWS Shield/WAF, Azure Front Door o el balanceador) con filtrado y límites por IP. Lo implementado aquí evita que un solo cliente o una ráfaga agote los recursos de la API y la base de datos. Si la API se publica detrás de un proxy, hay que configurar `ForwardedHeaders` con la IP del proxy como confiable, para que los límites se apliquen a la IP real del cliente.
+
+---
+
+## 5 bis. Login de ERP (fuera del alcance del PDF)
+
+Extensión opcional. Todas las piezas son gratuitas y funcionan con `docker compose up`, sin cuentas externas.
+
+| Función | Cómo funciona | Por qué así |
+|---|---|---|
+| **Inicio de sesión con correo** | El correo se normaliza a minúsculas; mismo mensaje genérico si el correo o la contraseña fallan. | No revela qué cuentas existen. |
+| **2FA con app autenticadora (TOTP, RFC 6238)** | QR generado en el navegador (`qr_flutter`) y verificación con Otp.NET. Tolera ±30 s de desfase de reloj y **rechaza reutilizar** un código ya aceptado. | Estándar abierto y gratuito (Google o Microsoft Authenticator). Más seguro que el SMS. |
+| **2FA por SMS (simulado)** | Código de 6 dígitos que vence en 5 min, máximo 5 intentos, reenvío cada 30 s. Se entrega en Mailpit. | Sin costo para la prueba. Para producción se implementa otro `IEnviadorSms` (por ejemplo Twilio) y se cambia `Sms__Proveedor`. |
+| **Códigos de respaldo** | 10 códigos `XXXXX-XXXXX` de un solo uso. Se muestran una vez y se guardan solo como HMAC. | Si el usuario pierde el teléfono no queda fuera de su cuenta. |
+| **Desafío de 2FA** | Tras la contraseña se emite un JWT de 5 minutos con **otra audiencia**, que nunca sirve como sesión. Máximo 5 códigos por desafío, un solo uso, y se invalida si la contraseña cambia. | La contraseña correcta sola no da acceso. |
+| **"Confiar en este dispositivo"** | Token aleatorio de 30 días en `flutter_secure_storage`; en la BD solo su HMAC. Se revoca al cambiar la contraseña. | Menos fricción sin perder control. |
+| **2FA obligatorio para ADMIN** | Un administrador no puede desactivarlo. | Los roles críticos siempre quedan protegidos. |
+| **Recuperación de contraseña** | Enlace de un solo uso que vence en 30 min. Pedir uno nuevo invalida el anterior. La respuesta es idéntica exista o no el correo, y el envío va por una cola en segundo plano, así que el tiempo tampoco lo delata. | Buenas prácticas de OWASP para restablecer contraseñas. |
+| **Cierre de sesiones al cambiar la contraseña** | El JWT lleva una "versión de sesión"; al restablecer o cambiar la contraseña (o desactivar el 2FA) sube la versión y los tokens anteriores dejan de valer. | Si la contraseña se filtró, el atacante pierde el acceso de inmediato. |
+| **Política de contraseñas** | Mínimo 12 caracteres, que no contenga el correo ni sea repetitiva, y **que no esté filtrada**: consulta gratuita a *Pwned Passwords* con k-anonimato (solo se envían 5 caracteres del SHA-1). Si el servicio no responde, se permite continuar. | Lo que recomienda hoy el NIST (SP 800-63B), en lugar de reglas de composición. |
+| **Aviso de dispositivo nuevo** | Correo cuando se inicia sesión desde un navegador o sistema no visto antes para ese usuario. | El usuario detecta accesos que no reconoce. |
+| **Bitácora de accesos** | Registra logins, fallos, bloqueos, 2FA, recuperaciones y cambios de seguridad, con IP y dispositivo. El usuario ve su actividad y el ADMIN ve la de todos. | Auditoría. |
+| **Secretos cifrados** | El secreto TOTP se guarda con AES-256-GCM. Claves derivadas por HKDF de `SEGURIDAD_CLAVE_MAESTRA`. | Una copia filtrada de la BD no permite generar códigos. |
+| **Aviso de Bloq Mayús y "recordar mi correo"** | Solo en el frontend; nunca se guarda la contraseña. | Comodidad. |
 
 ---
 

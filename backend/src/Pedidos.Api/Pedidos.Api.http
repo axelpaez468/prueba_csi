@@ -7,20 +7,43 @@
 POST {{baseUrl}}/api/auth/login
 Content-Type: application/json
 
-{ "username": "vendedor", "password": "Vendedor123!" }
+{ "email": "vendedor@pedidos.local", "password": "Vendedor123!" }
 
-### 2. Login como admin
+### 2. Login como admin (paso 1): tiene 2FA por SMS -> responde { requiereSegundoFactor, desafio, destino }
+# El SMS simulado llega a la bandeja de Mailpit: http://localhost:8025. Copia el código en @codigoSms.
 # @name loginAdmin
 POST {{baseUrl}}/api/auth/login
 Content-Type: application/json
 
-{ "username": "admin", "password": "Admin123!" }
+{ "email": "admin@pedidos.local", "password": "AdminPedidos2026!" }
+
+### 2b. Login como admin (paso 2): código del SMS
+@codigoSms = 000000
+# @name verificarAdmin
+POST {{baseUrl}}/api/auth/login/verificar
+Content-Type: application/json
+
+{ "desafio": "{{loginAdmin.response.body.desafio}}", "codigo": "{{codigoSms}}", "confiarDispositivo": false }
+
+### 2c. Recuperar contraseña -> 202 (el enlace llega a Mailpit)
+POST {{baseUrl}}/api/auth/recuperar
+Content-Type: application/json
+
+{ "email": "vendedor@pedidos.local" }
+
+### 2d. Seguridad de la cuenta del vendedor
+GET {{baseUrl}}/api/cuenta/seguridad
+Authorization: Bearer {{loginVendedor.response.body.token}}
+
+### 2e. Bitácora de accesos (solo ADMIN)
+GET {{baseUrl}}/api/admin/bitacora
+Authorization: Bearer {{verificarAdmin.response.body.token}}
 
 ### 3. Login con credenciales inválidas -> 401 { "error": ... }
 POST {{baseUrl}}/api/auth/login
 Content-Type: application/json
 
-{ "username": "vendedor", "password": "incorrecta" }
+{ "email": "vendedor@pedidos.local", "password": "incorrecta" }
 
 ### 4. Catálogo (requiere token)
 GET {{baseUrl}}/api/productos
@@ -49,12 +72,12 @@ Authorization: Bearer {{loginVendedor.response.body.token}}
 
 ### 8. Consultar el mismo pedido como ADMIN
 GET {{baseUrl}}/api/pedidos/{{crearPedido.response.body.numero}}
-Authorization: Bearer {{loginAdmin.response.body.token}}
+Authorization: Bearer {{verificarAdmin.response.body.token}}
 
 ### 9. ADMIN no puede crear pedidos (solo VENDEDOR) -> 403
 POST {{baseUrl}}/api/pedidos
 Content-Type: application/json
-Authorization: Bearer {{loginAdmin.response.body.token}}
+Authorization: Bearer {{verificarAdmin.response.body.token}}
 
 { "lineas": [ { "productoId": 1, "cantidad": 1 } ] }
 
