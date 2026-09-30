@@ -6,41 +6,44 @@ sealed class ResultadoLogin {
 }
 
 class SesionIniciada extends ResultadoLogin {
-  const SesionIniciada(this.session, {this.tokenDispositivo});
+  const SesionIniciada(this.session, {this.tokenDispositivo, this.codigosRespaldo});
 
   final Session session;
 
   /// Presente si el usuario marcó "confiar en este dispositivo".
   final String? tokenDispositivo;
+
+  /// Solo al terminar la configuración obligatoria de Google Authenticator: se muestran una vez.
+  final List<String>? codigosRespaldo;
 }
 
 class SegundoFactorRequerido extends ResultadoLogin {
-  const SegundoFactorRequerido({required this.desafio, required this.metodo, this.destino});
+  const SegundoFactorRequerido({required this.desafio, required this.metodo, this.secreto, this.uri});
 
   /// Token de corta duración que solo sirve para completar este login.
   final String desafio;
 
-  /// "TOTP" (app autenticadora) o "SMS".
+  /// "TOTP": pedir el código de Google Authenticator.
+  /// "CONFIGURAR": el 2FA es obligatorio (administradores) y aún no está configurado.
   final String metodo;
 
-  /// Teléfono enmascarado, si el método es SMS.
-  final String? destino;
+  /// Solo al configurar: clave y URI otpauth:// para el código QR.
+  final String? secreto;
+  final String? uri;
 
-  bool get esSms => metodo == 'SMS';
+  bool get esConfiguracion => metodo == 'CONFIGURAR';
 }
 
 class EstadoSeguridad {
   const EstadoSeguridad({
     required this.email,
     required this.metodo,
-    required this.telefonoEnmascarado,
     required this.codigosRespaldoRestantes,
     required this.dosFactorObligatorio,
   });
 
   final String email;
   final String metodo;
-  final String? telefonoEnmascarado;
   final int codigosRespaldoRestantes;
   final bool dosFactorObligatorio;
 
@@ -49,7 +52,6 @@ class EstadoSeguridad {
   factory EstadoSeguridad.fromJson(Map<String, dynamic> j) => EstadoSeguridad(
         email: j['email'] as String,
         metodo: j['metodo'] as String,
-        telefonoEnmascarado: j['telefonoEnmascarado'] as String?,
         codigosRespaldoRestantes: j['codigosRespaldoRestantes'] as int,
         dosFactorObligatorio: j['dosFactorObligatorio'] as bool,
       );

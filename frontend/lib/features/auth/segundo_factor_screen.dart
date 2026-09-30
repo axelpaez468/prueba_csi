@@ -1,15 +1,15 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
-import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_shell.dart';
+import '../cuenta/dialogos_2fa.dart';
 import 'auth_layout.dart';
 import 'session_controller.dart';
 
-/// Paso 2 del login: código de la app autenticadora, del SMS o un código de respaldo.
+/// Paso 2 del login con Google Authenticator.
+/// - Verificar: código de la app o un código de respaldo.
+/// - Configurar (administradores sin la app): escanear el QR y confirmar el primer código para poder entrar.
 class SegundoFactorScreen extends StatefulWidget {
   const SegundoFactorScreen({super.key});
 
@@ -18,35 +18,14 @@ class SegundoFactorScreen extends StatefulWidget {
 }
 
 class _SegundoFactorScreenState extends State<SegundoFactorScreen> {
-  static const _esperaReenvio = 30;
-
   final _codigo = TextEditingController();
   bool _usarRespaldo = false;
   bool _confiar = false;
-  int _segundosParaReenviar = _esperaReenvio;
-  Timer? _temporizador;
-
-  @override
-  void initState() {
-    super.initState();
-    if (context.read<SessionController>().desafio?.esSms ?? false) _iniciarCuentaRegresiva();
-  }
 
   @override
   void dispose() {
-    _temporizador?.cancel();
     _codigo.dispose();
     super.dispose();
-  }
-
-  void _iniciarCuentaRegresiva() {
-    _temporizador?.cancel();
-    setState(() => _segundosParaReenviar = _esperaReenvio);
-    _temporizador = Timer.periodic(const Duration(seconds: 1), (t) {
-      if (!mounted) return t.cancel();
-      setState(() => _segundosParaReenviar--);
-      if (_segundosParaReenviar <= 0) t.cancel();
-    });
   }
 
   bool get _codigoCompleto {
@@ -59,9 +38,9 @@ class _SegundoFactorScreenState extends State<SegundoFactorScreen> {
     context.read<SessionController>().verificarCodigo(_codigo.text, confiarDispositivo: _confiar);
   }
 
-  Future<void> _reenviar() async {
-    await context.read<SessionController>().reenviarCodigo();
-    if (mounted && context.read<SessionController>().error == null) _iniciarCuentaRegresiva();
+  void _alCambiar(String _) {
+    setState(() {});
+    if (!_usarRespaldo && _codigoCompleto) _verificar(); // se envía solo al completar los 6 dígitos
   }
 
   @override
@@ -70,41 +49,46 @@ class _SegundoFactorScreenState extends State<SegundoFactorScreen> {
     final desafio = session.desafio;
     final theme = Theme.of(context);
     if (desafio == null) return const SizedBox.shrink();
+    final configurando = desafio.esConfiguracion;
 
-    final instruccion = _usarRespaldo
-        ? 'Escribe uno de tus códigos de respaldo (formato XXXXX-XXXXX). Cada código funciona una sola vez.'
-        : desafio.esSms
-            ? 'Enviamos un código de 6 dígitos por SMS al ${desafio.destino ?? 'teléfono registrado'}.'
-            : 'Abre tu app autenticadora (Google o Microsoft Authenticator) y escribe el código de 6 dígitos.';
-
-    return AuthTarjeta(
-      icono: desafio.esSms ? Icons.sms_outlined : Icons.phonelink_lock_outlined,
-      titulo: 'Verificación en dos pasos',
-      subtitulo: instruccion,
-      alVolver: session.procesando ? null : session.cancelarSegundoFactor,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          TextField(
-            key: const Key('campo-codigo'),
+    final campo = _usarRespaldo
+        ? TextField(
+            key: const Key('campo-respaldo'),
             controller: _codigo,
             autofocus: true,
             enabled: !session.procesando,
             textAlign: TextAlign.center,
-            style: theme.textTheme.headlineSmall?.copyWith(letterSpacing: _usarRespaldo ? 2 : 10),
-            keyboardType: _usarRespaldo ? TextInputType.text : TextInputType.number,
-            autofillHints: const [AutofillHints.oneTimeCode],
+            style: theme.textTheme.headlineSmall?.copyWith(letterSpacing: 2),
             textCapitalization: TextCapitalization.characters,
-            inputFormatters: _usarRespaldo
-                ? [LengthLimitingTextInputFormatter(11)]
-                : [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)],
-            decoration: InputDecoration(hintText: _usarRespaldo ? 'XXXXX-XXXXX' : '000000'),
-            onChanged: (_) {
-              setState(() {});
-              if (!_usarRespaldo && _codigoCompleto) _verificar(); // se envía solo al completar los 6 dígitos
-            },
+            inputFormatters: [LengthLimitingTextInputFormatter(11)],
+            decoration: const InputDecoration(hintText: 'XXXXX-XXXXX'),
+            onChanged: _alCambiar,
             onSubmitted: (_) => _verificar(),
-          ),
+          )
+        : CampoCodigoApp(
+            controlador: _codigo,
+            habilitado: !session.procesando,
+            alCambiar: _alCambiar,
+            alCompletar: _verificar,
+          );
+
+    return AuthTarjeta(
+      icono: configurando ? Icons.qr_code_2 : Icons.phonelink_lock_outlined,
+      titulo: configurando ? 'Configura la verificación en dos pasos' : 'Verificación en dos pasos',
+      subtitulo: configurando
+          ? 'Por tu rol, necesitas Google Authenticator para entrar. Solo lo configurarás esta vez.'
+          : _usarRespaldo
+              ? 'Escribe uno de tus códigos de respaldo (formato XXXXX-XXXXX). Cada código funciona una sola vez.'
+              : 'Abre Google Authenticator en tu teléfono y escribe el código de 6 dígitos de "Sistema de Pedidos".',
+      alVolver: session.procesando ? null : session.cancelarSegundoFactor,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (configurando) ...[
+            QrGoogleAuthenticator(uri: desafio.uri, secreto: desafio.secreto),
+            const SizedBox(height: 8),
+          ],
+          campo,
           const SizedBox(height: 12),
           Casilla(
             valor: _confiar,
@@ -116,26 +100,18 @@ class _SegundoFactorScreenState extends State<SegundoFactorScreen> {
             const SizedBox(height: 8),
             InlineBanner.error(session.error!, key: const Key('error-2fa')),
           ],
-          if (session.aviso != null) ...[
-            const SizedBox(height: 8),
-            _AvisoExito(session.aviso!),
-          ],
           const SizedBox(height: 20),
           FilledButton(
             style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
             onPressed: session.procesando || !_codigoCompleto ? null : _verificar,
             child: session.procesando
                 ? const SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : const Text('Verificar'),
+                : Text(configurando ? 'Activar y entrar' : 'Verificar'),
           ),
-          const SizedBox(height: 12),
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 8,
-            runSpacing: 4,
-            children: [
-              TextButton(
+          if (!configurando) ...[
+            const SizedBox(height: 12),
+            Center(
+              child: TextButton(
                 onPressed: session.procesando
                     ? null
                     : () => setState(() {
@@ -143,34 +119,51 @@ class _SegundoFactorScreenState extends State<SegundoFactorScreen> {
                           _codigo.clear();
                           session.limpiarMensajes();
                         }),
-                child: Text(_usarRespaldo ? 'Usar el código de verificación' : 'Usar un código de respaldo'),
+                child: Text(_usarRespaldo ? 'Usar el código de Google Authenticator' : '¿Perdiste tu teléfono? Usa un código de respaldo'),
               ),
-              if (desafio.esSms && !_usarRespaldo)
-                TextButton(
-                  onPressed: session.procesando || _segundosParaReenviar > 0 ? null : _reenviar,
-                  child: Text(_segundosParaReenviar > 0 ? 'Reenviar en $_segundosParaReenviar s' : 'Reenviar código'),
-                ),
-            ],
-          ),
+            ),
+          ],
         ],
       ),
     );
   }
 }
 
-class _AvisoExito extends StatelessWidget {
-  const _AvisoExito(this.mensaje);
+/// Tras configurar Google Authenticator en el login: muestra los códigos de respaldo una sola vez antes de entrar.
+class CodigosRespaldoNuevosScreen extends StatefulWidget {
+  const CodigosRespaldoNuevosScreen({super.key, required this.codigos});
 
-  final String mensaje;
+  final List<String> codigos;
 
   @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(color: AppColors.successBg, borderRadius: BorderRadius.circular(10)),
-        child: Row(children: [
-          const Icon(Icons.check_circle_outline, color: AppColors.success, size: 20),
-          const SizedBox(width: 10),
-          Expanded(child: Text(mensaje, style: const TextStyle(color: AppColors.success, fontWeight: FontWeight.w500))),
-        ]),
+  State<CodigosRespaldoNuevosScreen> createState() => _CodigosRespaldoNuevosScreenState();
+}
+
+class _CodigosRespaldoNuevosScreenState extends State<CodigosRespaldoNuevosScreen> {
+  bool _guardados = false;
+
+  @override
+  Widget build(BuildContext context) => AuthTarjeta(
+        icono: Icons.verified_user_outlined,
+        titulo: 'Verificación en dos pasos activada',
+        subtitulo: 'Guarda estos códigos de respaldo antes de continuar.',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ListaCodigosRespaldo(codigos: widget.codigos),
+            Casilla(
+              valor: _guardados,
+              alCambiar: (v) => setState(() => _guardados = v),
+              texto: 'Los guardé en un lugar seguro',
+            ),
+            const SizedBox(height: 16),
+            FilledButton(
+              key: const Key('continuar-codigos'),
+              style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+              onPressed: _guardados ? context.read<SessionController>().codigosRespaldoGuardados : null,
+              child: const Text('Continuar'),
+            ),
+          ],
+        ),
       );
 }

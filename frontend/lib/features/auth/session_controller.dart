@@ -18,6 +18,7 @@ class SessionController extends ChangeNotifier {
   Session? _session;
   SegundoFactorRequerido? _desafio;
   String? _emailRecordado;
+  List<String>? _codigosRespaldoNuevos;
   bool _procesando = false;
   String? _error;
   String? _aviso;
@@ -29,6 +30,15 @@ class SessionController extends ChangeNotifier {
   SegundoFactorRequerido? get desafio => _desafio;
 
   String? get emailRecordado => _emailRecordado;
+
+  /// Códigos de respaldo recién generados al configurar Google Authenticator en el login:
+  /// la app los muestra una sola vez antes de entrar.
+  List<String>? get codigosRespaldoNuevos => _codigosRespaldoNuevos;
+
+  void codigosRespaldoGuardados() {
+    _codigosRespaldoNuevos = null;
+    notifyListeners();
+  }
   bool get procesando => _procesando;
 
   // Alias usado por la pantalla de login.
@@ -84,12 +94,6 @@ class SessionController extends ChangeNotifier {
     });
   }
 
-  Future<void> reenviarCodigo() async {
-    final desafio = _desafio;
-    if (desafio == null) return;
-    await _ejecutar(() async => _aviso = await _auth.reenviarCodigo(desafio.desafio));
-  }
-
   void cancelarSegundoFactor() {
     _desafio = null;
     _error = null;
@@ -109,6 +113,7 @@ class SessionController extends ChangeNotifier {
     await _storage.clear();
     _desafio = null;
     _aviso = null;
+    _codigosRespaldoNuevos = null;
     _error = expirada ? 'Tu sesión expiró. Inicia sesión de nuevo.' : null;
     _set(SessionStatus.unauthenticated, null);
   }
@@ -121,6 +126,7 @@ class SessionController extends ChangeNotifier {
 
   Future<void> _iniciar(SesionIniciada resultado) async {
     if (resultado.tokenDispositivo != null) await _storage.guardarTokenDispositivo(resultado.tokenDispositivo!);
+    _codigosRespaldoNuevos = resultado.codigosRespaldo;
     await _storage.save(resultado.session);
     _desafio = null;
     _set(SessionStatus.authenticated, resultado.session);

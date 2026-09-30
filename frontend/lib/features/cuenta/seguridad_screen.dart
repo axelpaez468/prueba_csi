@@ -66,8 +66,6 @@ class _SeguridadScreenState extends State<SeguridadScreen> {
   Future<void> _configurarTotp() async =>
       _mostrarCodigos(await showDialog<List<String>>(context: context, builder: (_) => const ConfigurarTotpDialog()));
 
-  Future<void> _configurarSms() async =>
-      _mostrarCodigos(await showDialog<List<String>>(context: context, builder: (_) => const ConfigurarSmsDialog()));
 
   Future<void> _regenerar() async {
     final password = await pedirPassword(context, titulo: 'Regenerar códigos de respaldo', accion: 'Regenerar');
@@ -104,7 +102,6 @@ class _SeguridadScreenState extends State<SeguridadScreen> {
         _TarjetaDosFactor(
           estado: estado,
           alConfigurarTotp: _configurarTotp,
-          alConfigurarSms: _configurarSms,
           alRegenerar: _regenerar,
           alDesactivar: _desactivar,
         ),
@@ -192,14 +189,12 @@ class _TarjetaDosFactor extends StatelessWidget {
   const _TarjetaDosFactor({
     required this.estado,
     required this.alConfigurarTotp,
-    required this.alConfigurarSms,
     required this.alRegenerar,
     required this.alDesactivar,
   });
 
   final EstadoSeguridad? estado;
   final VoidCallback alConfigurarTotp;
-  final VoidCallback alConfigurarSms;
   final VoidCallback alRegenerar;
   final VoidCallback alDesactivar;
 
@@ -223,12 +218,7 @@ class _TarjetaDosFactor extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 if (e.activo) ...[
-                  Text(
-                    e.metodo == 'TOTP'
-                        ? 'Método: app autenticadora.'
-                        : 'Método: SMS al ${e.telefonoEnmascarado ?? 'teléfono registrado'}.',
-                    style: theme.textTheme.bodyMedium,
-                  ),
+                  Text('Método: Google Authenticator.', style: theme.textTheme.bodyMedium),
                   const SizedBox(height: 4),
                   Text('Códigos de respaldo disponibles: ${e.codigosRespaldoRestantes} de 10.', style: secundario),
                   if (e.codigosRespaldoRestantes <= 3) ...[
@@ -248,12 +238,7 @@ class _TarjetaDosFactor extends StatelessWidget {
                     FilledButton.icon(
                       onPressed: alConfigurarTotp,
                       icon: const Icon(Icons.qr_code_2, size: 18),
-                      label: Text(e.metodo == 'TOTP' ? 'Reconfigurar app' : 'Usar app autenticadora'),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed: alConfigurarSms,
-                      icon: const Icon(Icons.sms_outlined, size: 18),
-                      label: Text(e.metodo == 'SMS' ? 'Cambiar teléfono' : 'Usar SMS'),
+                      label: Text(e.activo ? 'Configurar en otro teléfono' : 'Activar Google Authenticator'),
                     ),
                     if (e.activo)
                       OutlinedButton.icon(
@@ -274,7 +259,7 @@ class _TarjetaDosFactor extends StatelessWidget {
                   Text('Para administradores la verificación en dos pasos es obligatoria.', style: secundario),
                 ] else if (!e.activo) ...[
                   const SizedBox(height: 12),
-                  Text('Recomendado: la app autenticadora es gratuita y más segura que el SMS.', style: secundario),
+                  Text('Google Authenticator es gratuita (Android y iPhone) y funciona sin conexión.', style: secundario),
                 ],
               ],
             ),

@@ -26,11 +26,6 @@ class AuthRepository {
     return _resultado(json) as SesionIniciada;
   }
 
-  Future<String> reenviarCodigo(String desafio) async {
-    final json = await _api.post('/api/auth/login/reenviar', {'desafio': desafio}, authenticated: false);
-    return (json as Map<String, dynamic>)['mensaje'] as String;
-  }
-
   Future<String> solicitarRecuperacion(String email) async {
     final json = await _api.post('/api/auth/recuperar', {'email': email}, authenticated: false);
     return (json as Map<String, dynamic>)['mensaje'] as String;
@@ -50,9 +45,14 @@ class AuthRepository {
       return SegundoFactorRequerido(
         desafio: json['desafio'] as String,
         metodo: json['metodo'] as String,
-        destino: json['destino'] as String?,
+        secreto: json['secreto'] as String?,
+        uri: json['uri'] as String?,
       );
     }
-    return SesionIniciada(Session.fromJson(json), tokenDispositivo: json['tokenDispositivo'] as String?);
+    return SesionIniciada(
+      Session.fromJson(json),
+      tokenDispositivo: json['tokenDispositivo'] as String?,
+      codigosRespaldo: (json['codigosRespaldo'] as List?)?.cast<String>(),
+    );
   }
 }

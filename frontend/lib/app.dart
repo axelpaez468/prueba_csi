@@ -105,6 +105,10 @@ class _PedidosAppState extends State<PedidosApp> {
             if (token != null) {
               return RestablecerPasswordScreen(token: token, alTerminar: () => setState(() => _tokenRestablecer = null));
             }
+            final codigos = session.codigosRespaldoNuevos;
+            if (session.status == SessionStatus.authenticated && codigos != null) {
+              return CodigosRespaldoNuevosScreen(codigos: codigos);
+            }
             return switch (session.status) {
               SessionStatus.restoring => const Scaffold(body: Center(child: CircularProgressIndicator())),
               SessionStatus.unauthenticated => const LoginScreen(),

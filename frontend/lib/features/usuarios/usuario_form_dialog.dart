@@ -169,7 +169,7 @@ class _UsuarioFormDialogState extends State<UsuarioFormDialog> {
                 ),
                 if (_rol == 'ADMIN') ...[
                   const SizedBox(height: 8),
-                  Text('Los administradores inician sesión con un código por SMS a este teléfono.',
+                  Text('Los administradores configuran Google Authenticator en su primer inicio de sesión.',
                       style: theme.textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
                 ],
                 if (_esAlta) ...[

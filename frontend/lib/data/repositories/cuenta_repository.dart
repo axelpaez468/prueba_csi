@@ -23,11 +23,6 @@ class CuentaRepository {
   Future<List<String>> confirmarTotp(String codigo) async =>
       _codigos(await _api.post('/api/cuenta/2fa/totp/confirmar', {'codigo': codigo}));
 
-  Future<void> iniciarSms(String telefono) => _api.post('/api/cuenta/2fa/sms', {'telefono': telefono});
-
-  Future<List<String>> confirmarSms(String codigo) async =>
-      _codigos(await _api.post('/api/cuenta/2fa/sms/confirmar', {'codigo': codigo}));
-
   Future<Session> desactivar(String password) async =>
       Session.fromJson(await _api.post('/api/cuenta/2fa/desactivar', {'password': password}) as Map<String, dynamic>);
 

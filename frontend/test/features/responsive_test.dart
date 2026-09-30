@@ -64,6 +64,9 @@ final _accesos = [
     }
 ];
 
+/// Método que devuelve el login simulado: 'TOTP' (verificar) o 'CONFIGURAR' (primer ingreso de un admin).
+var _metodoLogin = 'TOTP';
+
 /// API simulada: responde según la ruta.
 http.Response _responder(http.Request req) {
   final cuerpo = switch (req.url.path) {
@@ -73,8 +76,7 @@ http.Response _responder(http.Request req) {
       ],
     '/api/cuenta/seguridad' => {
         'email': 'usuario-con-correo-bastante-largo@empresa-de-ejemplo.com',
-        'metodo': 'SMS',
-        'telefonoEnmascarado': '+502 •••• 0101',
+        'metodo': 'TOTP',
         'codigosRespaldoRestantes': 2,
         'dosFactorObligatorio': true,
       },
@@ -100,7 +102,7 @@ http.Response _responder(http.Request req) {
             'creadoEn': '2026-09-29T15:30:00Z',
           },
       ],
-    '/api/auth/login' => {'requiereSegundoFactor': true, 'desafio': 'd', 'metodo': 'SMS', 'destino': '+502 •••• 0101'},
+    '/api/auth/login' => {'requiereSegundoFactor': true, 'desafio': 'd', 'metodo': _metodoLogin, 'secreto': 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP', 'uri': 'otpauth://totp/Sistema%20de%20Pedidos:admin@pedidos.local?secret=JBSWY3DPEHPK3PXP&issuer=Sistema%20de%20Pedidos'},
     _ => <String, dynamic>{},
   };
   return http.Response(jsonEncode(cuerpo), 200, headers: {'content-type': 'application/json; charset=utf-8'});
@@ -178,9 +180,24 @@ void main() {
       });
 
       testWidgets('verificación en dos pasos', (tester) async {
+        _metodoLogin = 'TOTP';
         await _montar(tester, tamano, const SegundoFactorScreen(), sesion: _Sesion.segundoFactor);
         expect(find.text('Verificación en dos pasos'), findsOneWidget);
-        expect(find.textContaining('+502 •••• 0101'), findsOneWidget);
+        expect(find.textContaining('Google Authenticator'), findsWidgets);
+      });
+
+      testWidgets('configurar Google Authenticator en el primer ingreso', (tester) async {
+        _metodoLogin = 'CONFIGURAR';
+        await _montar(tester, tamano, const SegundoFactorScreen(), sesion: _Sesion.segundoFactor);
+        expect(find.text('Configura la verificación en dos pasos'), findsOneWidget);
+        expect(find.byKey(const Key('qr-totp')), findsOneWidget);
+        expect(find.text('Activar y entrar'), findsOneWidget);
+      });
+
+      testWidgets('códigos de respaldo tras configurar', (tester) async {
+        await _montar(tester, tamano,
+            CodigosRespaldoNuevosScreen(codigos: List.generate(10, (i) => 'ABCDE-FGH${i}J')));
+        expect(find.text('Continuar'), findsOneWidget);
       });
 
       testWidgets('recuperar contraseña', (tester) async {

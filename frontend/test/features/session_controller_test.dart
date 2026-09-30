@@ -41,13 +41,13 @@ void main() {
 
   test('login con 2FA: pide el código y con el código correcto inicia sesión y guarda el dispositivo', () async {
     final session = crear((req) => req.url.path == '/api/auth/login'
-        ? json({'requiereSegundoFactor': true, 'desafio': 'd-123', 'metodo': 'SMS', 'destino': '+502 •••• 0101'})
+        ? json({'requiereSegundoFactor': true, 'desafio': 'd-123', 'metodo': 'TOTP'})
         : json({..._sesion, 'tokenDispositivo': 'disp-456'}));
     await session.restore();
 
     await session.login('admin@pedidos.local', 'clave', recordar: true);
     expect(session.status, SessionStatus.segundoFactor);
-    expect(session.desafio!.destino, '+502 •••• 0101');
+    expect(session.desafio!.esConfiguracion, isFalse);
     expect(storage.emailRecordado, 'admin@pedidos.local');
 
     await session.verificarCodigo('123456', confiarDispositivo: true);
@@ -92,5 +92,23 @@ void main() {
 
     expect(session.status, SessionStatus.unauthenticated);
     expect(session.error, contains('expiró'));
+  });
+
+  test('admin sin app: configura Google Authenticator y la sesión trae sus códigos de respaldo', () async {
+    final session = crear((req) => req.url.path == '/api/auth/login'
+        ? json({'requiereSegundoFactor': true, 'desafio': 'd', 'metodo': 'CONFIGURAR', 'secreto': 'S', 'uri': 'otpauth://totp/x'})
+        : json({..._sesion, 'codigosRespaldo': List.generate(10, (i) => 'AAAAA-BBBB$i')}));
+    await session.restore();
+
+    await session.login('admin@pedidos.local', 'clave');
+    expect(session.desafio!.esConfiguracion, isTrue);
+    expect(session.desafio!.uri, 'otpauth://totp/x');
+
+    await session.verificarCodigo('123456');
+    expect(session.status, SessionStatus.authenticated);
+    expect(session.codigosRespaldoNuevos, hasLength(10)); // se muestran antes de entrar
+
+    session.codigosRespaldoGuardados();
+    expect(session.codigosRespaldoNuevos, isNull);
   });
 }
