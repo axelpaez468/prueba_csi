@@ -44,7 +44,7 @@ public partial class CuentaService
 
     private static void ExigirPassword(Usuario u, string? password)
     {
-        if (string.IsNullOrEmpty(password) || !BCrypt.Net.BCrypt.Verify(password, u.PasswordHash))
+        if (string.IsNullOrEmpty(password) || !AuthService.VerificarPassword(password, u.PasswordHash))
             throw new BusinessRuleException("La contraseña actual no es correcta.");
     }
 

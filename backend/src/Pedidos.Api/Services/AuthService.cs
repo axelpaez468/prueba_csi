@@ -11,7 +11,7 @@ using Pedidos.Api.Services.Seguridad;
 namespace Pedidos.Api.Services;
 
 /// <summary>Resultado del primer paso del login.</summary>
-public record LoginResultado(LoginResponse? Sesion, DesafioResponse? Desafio, TimeSpan? BloqueadoPor)
+public record LoginResultado(LoginResponse? Sesion, DesafioResponse? Desafio, TimeSpan? BloqueadoPor, bool Desactivada = false)
 {
     public static LoginResultado Invalido => new(null, null, null);
 }
@@ -54,6 +54,17 @@ public class AuthService
 
     public static string NormalizarEmail(string email) => email.Trim().ToLowerInvariant();
 
+    /// <summary>
+    /// Verifica contra BCrypt. Un usuario invitado que aún no creó su contraseña no tiene un hash BCrypt:
+    /// se verifica igual contra el hash ficticio (mismo tiempo de respuesta) y el resultado es siempre falso.
+    /// </summary>
+    public static bool VerificarPassword(string password, string? hash)
+    {
+        var esBcrypt = hash is not null && hash.StartsWith("$2");
+        var resultado = BCrypt.Net.BCrypt.Verify(password, esBcrypt ? hash : HashFicticio);
+        return esBcrypt && resultado;
+    }
+
     // ---------- Paso 1: correo y contraseña ----------
 
     public async Task<LoginResultado> LoginAsync(string email, string password, string? tokenDispositivo,
@@ -72,7 +83,7 @@ public class AuthService
 
         // Consulta LINQ: EF Core la envía parametrizada, nunca concatenada.
         var usuario = await _db.Usuarios.FirstOrDefaultAsync(u => u.Email == email, ct);
-        var passwordValida = BCrypt.Net.BCrypt.Verify(password, usuario?.PasswordHash ?? HashFicticio);
+        var passwordValida = VerificarPassword(password, usuario?.PasswordHash);
         if (usuario is null || !passwordValida)
         {
             _throttle.RegistrarFallo(email);
@@ -82,6 +93,14 @@ public class AuthService
         }
 
         _throttle.RegistrarExito(email);
+
+        // Solo se informa tras validar la contraseña: a quien no la conoce no se le revela que la cuenta existe.
+        if (!usuario.Activo)
+        {
+            _bitacora.Registrar(EventosBitacora.CuentaDesactivada, false, email, ctx, usuario.Id);
+            await _db.SaveChangesAsync(ct);
+            return new LoginResultado(null, null, null, Desactivada: true);
+        }
 
         if (usuario.DosFactor != MetodosDosFactor.Ninguno && !await DispositivoConfiableAsync(usuario, tokenDispositivo, ct))
         {
@@ -174,7 +193,8 @@ public class AuthService
                     ?? throw new BusinessRuleException("La verificación expiró. Inicia sesión de nuevo.");
         var usuario = await _db.Usuarios.FirstOrDefaultAsync(u => u.Id == datos.UsuarioId, ct);
         // Si la contraseña o el 2FA cambiaron después de emitir el desafío, ya no es válido.
-        if (usuario is null || usuario.VersionSesion != datos.VersionSesion || usuario.DosFactor == MetodosDosFactor.Ninguno)
+        if (usuario is null || !usuario.Activo || usuario.VersionSesion != datos.VersionSesion
+            || usuario.DosFactor == MetodosDosFactor.Ninguno)
             throw new BusinessRuleException("La verificación expiró. Inicia sesión de nuevo.");
         return (usuario, datos.DesafioId);
     }

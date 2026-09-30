@@ -4,8 +4,22 @@ public class Usuario
 {
     public int Id { get; set; }
 
-    /// <summary>Nombre para mostrar. El inicio de sesión es con <see cref="Email"/>.</summary>
+    /// <summary>
+    /// Nombre para mostrar ("Nombre Apellido"); se mantiene a partir de <see cref="Nombre"/> y <see cref="Apellido"/>.
+    /// El inicio de sesión es con <see cref="Email"/>.
+    /// </summary>
     public string Username { get; set; } = string.Empty;
+
+    public string Nombre { get; set; } = string.Empty;
+    public string Apellido { get; set; } = string.Empty;
+
+    /// <summary>Código interno del empleado (p. ej. VEN-0001), único y en mayúsculas.</summary>
+    public string CodigoCorporativo { get; set; } = string.Empty;
+
+    /// <summary>Un usuario desactivado no puede iniciar sesión; se conserva por su historial de pedidos.</summary>
+    public bool Activo { get; set; } = true;
+
+    public DateTime CreadoEn { get; set; }
 
     /// <summary>Siempre en minúsculas (se normaliza al guardar y al buscar).</summary>
     public string Email { get; set; } = string.Empty;
@@ -13,7 +27,7 @@ public class Usuario
     public string PasswordHash { get; set; } = string.Empty;
     public string Rol { get; set; } = Roles.Vendedor;
 
-    /// <summary>Teléfono en formato E.164 (+50255550101), usado para el 2FA por SMS.</summary>
+    /// <summary>Teléfono en formato E.164 (+50255550101): contacto y 2FA por SMS.</summary>
     public string? Telefono { get; set; }
 
     public string DosFactor { get; set; } = MetodosDosFactor.Ninguno;

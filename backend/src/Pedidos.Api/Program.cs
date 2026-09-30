@@ -70,6 +70,7 @@ builder.Services.AddScoped<SegundoFactorService>();
 builder.Services.AddScoped<BitacoraService>();
 builder.Services.AddScoped<RecuperacionService>();
 builder.Services.AddScoped<CuentaService>();
+builder.Services.AddScoped<Pedidos.Api.Services.Usuarios.UsuarioService>();
 builder.Services.AddScoped<PoliticaPassword>();
 builder.Services.AddHttpClient<IVerificadorPasswordFiltrada, HibpVerificador>(c =>
 {
@@ -151,7 +152,7 @@ builder.Services.AddAuthorization(o =>
 
 builder.Services.AddCors(o => o.AddDefaultPolicy(p => p
     .WithOrigins(corsOrigins)
-    .WithMethods("GET", "POST")
+    .WithMethods("GET", "POST", "PUT", "DELETE")
     .WithHeaders("Authorization", "Content-Type")));
 
 builder.Services.AddRateLimiter(o =>

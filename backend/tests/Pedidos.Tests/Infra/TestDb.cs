@@ -43,9 +43,22 @@ public sealed class TestDb : IDisposable
 
     public static List<Usuario> UsuariosSemilla() => new()
     {
-        new Usuario { Username = "vendedor", Email = EmailVendedor, PasswordHash = HashDePrueba, Rol = Roles.Vendedor }, // VendedorId
-        new Usuario { Username = "vendedor2", Email = "vendedor2@pedidos.test", PasswordHash = HashDePrueba, Rol = Roles.Vendedor }, // OtroVendedorId
-        new Usuario { Username = "admin", Email = EmailAdmin, PasswordHash = HashDePrueba, Rol = Roles.Admin } // AdminId
+        Crear("Vendedor", "Uno", EmailVendedor, "VEN-0001", Roles.Vendedor, "+50255550102"),       // VendedorId
+        Crear("Vendedor", "Dos", "vendedor2@pedidos.test", "VEN-0002", Roles.Vendedor, "+50255550103"), // OtroVendedorId
+        Crear("Admin", "General", EmailAdmin, "ADM-0001", Roles.Admin, "+50255550101")             // AdminId
+    };
+
+    private static Usuario Crear(string nombre, string apellido, string email, string codigo, string rol, string telefono) => new()
+    {
+        Nombre = nombre,
+        Apellido = apellido,
+        Username = $"{nombre} {apellido}",
+        Email = email,
+        CodigoCorporativo = codigo,
+        Telefono = telefono,
+        PasswordHash = HashDePrueba,
+        Rol = rol,
+        CreadoEn = DateTime.UtcNow
     };
 
     public static List<Producto> ProductosSemilla() => new()

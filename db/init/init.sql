@@ -177,13 +177,61 @@ CREATE TABLE dbo.BitacoraAccesos (
 );
 GO
 
+-- =====================================================================
+-- Administración de usuarios: nombre, apellido, código corporativo, estado activo/inactivo.
+-- =====================================================================
+IF COL_LENGTH(N'dbo.Usuarios', N'Nombre') IS NULL
+    ALTER TABLE dbo.Usuarios ADD Nombre NVARCHAR(60) NULL;
+IF COL_LENGTH(N'dbo.Usuarios', N'Apellido') IS NULL
+    ALTER TABLE dbo.Usuarios ADD Apellido NVARCHAR(60) NULL;
+IF COL_LENGTH(N'dbo.Usuarios', N'CodigoCorporativo') IS NULL
+    ALTER TABLE dbo.Usuarios ADD CodigoCorporativo NVARCHAR(20) NULL;
+IF COL_LENGTH(N'dbo.Usuarios', N'Activo') IS NULL
+    ALTER TABLE dbo.Usuarios ADD Activo BIT NOT NULL CONSTRAINT DF_Usuarios_Activo DEFAULT (1);
+IF COL_LENGTH(N'dbo.Usuarios', N'CreadoEn') IS NULL
+    ALTER TABLE dbo.Usuarios ADD CreadoEn DATETIME2 NOT NULL CONSTRAINT DF_Usuarios_CreadoEn DEFAULT (SYSUTCDATETIME());
+GO
+
+-- Username pasa a ser el nombre para mostrar ("Nombre Apellido"): puede repetirse y es más largo.
+IF EXISTS (SELECT 1 FROM sys.key_constraints WHERE name = N'UQ_Usuarios_Username')
+    ALTER TABLE dbo.Usuarios DROP CONSTRAINT UQ_Usuarios_Username;
+GO
+IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.Usuarios') AND name = N'Username' AND max_length < 260)
+    ALTER TABLE dbo.Usuarios ALTER COLUMN Username NVARCHAR(130) NOT NULL;
+GO
+
+-- BD existente: datos para los usuarios originales.
+UPDATE dbo.Usuarios SET Nombre = N'Vendedor', Apellido = N'Demo', CodigoCorporativo = N'VEN-0001',
+       Telefono = COALESCE(Telefono, N'+50255550102'), Username = N'Vendedor Demo'
+ WHERE Nombre IS NULL AND Rol = N'VENDEDOR' AND Username = N'vendedor';
+UPDATE dbo.Usuarios SET Nombre = N'Administrador', Apellido = N'General', CodigoCorporativo = N'ADM-0001',
+       Username = N'Administrador General'
+ WHERE Nombre IS NULL AND Rol = N'ADMIN' AND Username = N'admin';
+-- Cualquier otro usuario previo: valores derivados para cumplir las restricciones.
+UPDATE dbo.Usuarios SET Nombre = Username, Apellido = N'-', CodigoCorporativo = CONCAT(N'USR-', RIGHT(CONCAT(N'0000', Id), 4))
+ WHERE Nombre IS NULL;
+GO
+
+IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.Usuarios') AND name = N'Nombre' AND is_nullable = 1)
+BEGIN
+    ALTER TABLE dbo.Usuarios ALTER COLUMN Nombre NVARCHAR(60) NOT NULL;
+    ALTER TABLE dbo.Usuarios ALTER COLUMN Apellido NVARCHAR(60) NOT NULL;
+    ALTER TABLE dbo.Usuarios ALTER COLUMN CodigoCorporativo NVARCHAR(20) NOT NULL;
+END
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UQ_Usuarios_CodigoCorporativo')
+    CREATE UNIQUE INDEX UQ_Usuarios_CodigoCorporativo ON dbo.Usuarios(CodigoCorporativo);
+GO
+
 -- ---------- Datos semilla ----------
 -- Hashes BCrypt (work factor 11). Contraseñas de prueba documentadas en el README.
 -- El admin tiene 2FA por SMS (obligatorio para su rol); los SMS se ven en la bandeja de Mailpit.
 IF NOT EXISTS (SELECT 1 FROM dbo.Usuarios)
-INSERT INTO dbo.Usuarios (Username, Email, PasswordHash, Rol, DosFactor, Telefono) VALUES
-    (N'vendedor', N'vendedor@pedidos.local', N'$2a$11$oFp4Su1EGJ.wZ2.Kt13t..t1cMYLEPasMvtAK/XKWj28ldCnZYb0q', N'VENDEDOR', N'NINGUNO', NULL),
-    (N'admin',    N'admin@pedidos.local',    N'$2a$11$E6LutlNGkp4N/dpe38.jW.ZfVU6YeW/D4mgxag/fpqIMZWisZA4FW', N'ADMIN',    N'SMS',     N'+50255550101');
+INSERT INTO dbo.Usuarios (Username, Nombre, Apellido, CodigoCorporativo, Email, PasswordHash, Rol, DosFactor, Telefono) VALUES
+    (N'Vendedor Demo', N'Vendedor', N'Demo', N'VEN-0001', N'vendedor@pedidos.local',
+     N'$2a$11$oFp4Su1EGJ.wZ2.Kt13t..t1cMYLEPasMvtAK/XKWj28ldCnZYb0q', N'VENDEDOR', N'NINGUNO', N'+50255550102'),
+    (N'Administrador General', N'Administrador', N'General', N'ADM-0001', N'admin@pedidos.local',
+     N'$2a$11$E6LutlNGkp4N/dpe38.jW.ZfVU6YeW/D4mgxag/fpqIMZWisZA4FW', N'ADMIN', N'SMS', N'+50255550101');
 GO
 
 IF NOT EXISTS (SELECT 1 FROM dbo.Productos)

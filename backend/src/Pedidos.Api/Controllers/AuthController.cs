@@ -56,6 +56,9 @@ public class AuthController : ControllerBase
             return StatusCode(StatusCodes.Status429TooManyRequests,
                 new ErrorResponse($"Demasiados intentos fallidos. Intenta de nuevo en {Math.Ceiling(espera.TotalMinutes)} minuto(s)."));
         }
+        if (resultado.Desactivada)
+            return StatusCode(StatusCodes.Status403Forbidden,
+                new ErrorResponse("Tu cuenta está desactivada. Contacta al administrador."));
         if (resultado.Desafio is not null)
             return Ok(resultado.Desafio);
         if (resultado.Sesion is not null)

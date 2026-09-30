@@ -28,7 +28,11 @@ public class AppDbContext : DbContext
                 t.HasCheckConstraint("CK_Usuarios_Rol", "Rol IN ('VENDEDOR','ADMIN')");
                 t.HasCheckConstraint("CK_Usuarios_DosFactor", "DosFactor IN ('NINGUNO','TOTP','SMS')");
             });
-            e.Property(u => u.Username).HasMaxLength(50).IsRequired();
+            e.Property(u => u.Username).HasMaxLength(130).IsRequired();
+            e.Property(u => u.Nombre).HasMaxLength(60).IsRequired();
+            e.Property(u => u.Apellido).HasMaxLength(60).IsRequired();
+            e.Property(u => u.CodigoCorporativo).HasMaxLength(20).IsRequired();
+            e.Property(u => u.CreadoEn).HasConversion(v => v, v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
             e.Property(u => u.Email).HasMaxLength(254).IsRequired();
             e.Property(u => u.PasswordHash).HasMaxLength(100).IsRequired();
             e.Property(u => u.Rol).HasMaxLength(20).IsRequired();
@@ -37,8 +41,8 @@ public class AppDbContext : DbContext
             e.Property(u => u.DosFactor).HasMaxLength(10).IsRequired();
             e.Property(u => u.TotpSecretoCifrado).HasMaxLength(200);
             e.Property(u => u.TotpPendienteCifrado).HasMaxLength(200);
-            e.HasIndex(u => u.Username).IsUnique();
             e.HasIndex(u => u.Email).IsUnique();
+            e.HasIndex(u => u.CodigoCorporativo).IsUnique();
         });
 
         model.Entity<CodigoRespaldo>(e =>

@@ -17,6 +17,7 @@ public class GlobalExceptionHandler : IExceptionHandler
         var (status, mensaje) = exception switch
         {
             BusinessRuleException e => (StatusCodes.Status400BadRequest, e.Message),
+            NoEncontradoException e => (StatusCodes.Status404NotFound, e.Message),
             // Incluye 413 (cuerpo mayor al límite de Kestrel) y otros errores de protocolo.
             BadHttpRequestException e => (e.StatusCode, e.StatusCode == StatusCodes.Status413PayloadTooLarge
                 ? "La solicitud es demasiado grande."

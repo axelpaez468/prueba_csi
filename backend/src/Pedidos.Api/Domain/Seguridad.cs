@@ -81,6 +81,15 @@ public static class EventosBitacora
     public const string DosFactorDesactivado = "2FA_DESACTIVADO";
     public const string CodigosRespaldoRegenerados = "CODIGOS_RESPALDO_REGENERADOS";
     public const string DispositivoNuevo = "DISPOSITIVO_NUEVO";
+    public const string CuentaDesactivada = "CUENTA_DESACTIVADA";
+
+    // Administración de usuarios (el registro guarda al administrador que actuó y el usuario afectado en Detalle).
+    public const string UsuarioCreado = "USUARIO_CREADO";
+    public const string UsuarioEditado = "USUARIO_EDITADO";
+    public const string UsuarioActivado = "USUARIO_ACTIVADO";
+    public const string UsuarioDesactivado = "USUARIO_DESACTIVADO";
+    public const string UsuarioEliminado = "USUARIO_ELIMINADO";
+    public const string InvitacionEnviada = "INVITACION_ENVIADA";
 }
 
 /// <summary>Bitácora de accesos y eventos de seguridad (auditoría).</summary>

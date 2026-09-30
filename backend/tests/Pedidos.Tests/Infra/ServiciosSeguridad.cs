@@ -24,6 +24,9 @@ public class CorreoFalso : IEnviadorCorreo
 
     public string UltimoTokenRecuperacion() =>
         Regex.Match(Enviados.Last(m => m.Asunto.Contains("Restablece")).Texto, @"restablecer=([\w-]+)").Groups[1].Value;
+
+    public string UltimoTokenInvitacion(string para) =>
+        Regex.Match(Enviados.Last(m => m.Para == para && m.Asunto.Contains("Bienvenido")).Texto, @"restablecer=([\w-]+)").Groups[1].Value;
 }
 
 public class VerificadorFiltradasFalso : IVerificadorPasswordFiltrada
@@ -71,6 +74,9 @@ public sealed class ServiciosSeguridad
     public CuentaService Cuenta(AppDbContext db) =>
         new(db, Cifrador, Totp, SegundoFactor(db), new PoliticaPassword(Filtradas), new BitacoraService(db, Reloj),
             Tokens, Correo);
+
+    public Pedidos.Api.Services.Usuarios.UsuarioService Usuarios(AppDbContext db) =>
+        new(db, Recuperacion(db), new BitacoraService(db, Reloj), Reloj);
 
     public RecuperacionService Recuperacion(AppDbContext db) =>
         new(db, Cifrador, new PoliticaPassword(Filtradas), new BitacoraService(db, Reloj), Correo,

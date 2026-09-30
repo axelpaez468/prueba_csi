@@ -24,6 +24,9 @@ public class RecuperacionService
 {
     public static readonly TimeSpan VigenciaEnlace = TimeSpan.FromMinutes(30);
 
+    /// <summary>La invitación a un usuario nuevo dura más: puede no revisar el correo de inmediato.</summary>
+    public static readonly TimeSpan VigenciaInvitacion = TimeSpan.FromHours(48);
+
     private readonly AppDbContext _db;
     private readonly Cifrador _cifrador;
     private readonly PoliticaPassword _politica;
@@ -50,25 +53,13 @@ public class RecuperacionService
     {
         email = AuthService.NormalizarEmail(email);
         var usuario = await _db.Usuarios.AsNoTracking().FirstOrDefaultAsync(u => u.Email == email, ct);
-        _bitacora.Registrar(EventosBitacora.RecuperacionSolicitada, usuario is not null, email, ctx, usuario?.Id);
+        // Una cuenta desactivada no recibe enlaces (la respuesta al cliente es la misma de siempre).
+        var procede = usuario is { Activo: true };
+        _bitacora.Registrar(EventosBitacora.RecuperacionSolicitada, procede, email, ctx, usuario?.Id);
 
-        if (usuario is not null)
+        if (procede)
         {
-            // Solo un enlace vigente a la vez: pedir uno nuevo invalida los anteriores.
-            await _db.TokensRecuperacion
-                .Where(t => t.UsuarioId == usuario.Id && t.UsadoEn == null)
-                .ExecuteUpdateAsync(s => s.SetProperty(t => t.UsadoEn, Ahora), ct);
-
-            var token = Aleatorio.Token();
-            _db.TokensRecuperacion.Add(new TokenRecuperacion
-            {
-                UsuarioId = usuario.Id,
-                TokenHash = _cifrador.Huella(token), // en la BD solo la huella: una filtración no sirve para usar el enlace
-                CreadoEn = Ahora,
-                ExpiraEn = Ahora + VigenciaEnlace
-            });
-
-            var enlace = $"{_frontend.UrlPublica.TrimEnd('/')}/?restablecer={token}";
+            var enlace = await CrearEnlaceAsync(usuario!.Id, VigenciaEnlace, ct);
             _correo.Encolar(usuario.Email, "Restablece tu contraseña",
                 $"Hola {usuario.Username}:\n\nRecibimos una solicitud para restablecer tu contraseña. " +
                 $"Abre este enlace (vence en {VigenciaEnlace.TotalMinutes:0} minutos y funciona una sola vez):\n\n{enlace}\n\n" +
@@ -79,6 +70,42 @@ public class RecuperacionService
         await _db.SaveChangesAsync(ct);
     }
 
+    /// <summary>Correo de bienvenida para un usuario creado por el administrador: define su contraseña con el enlace.</summary>
+    public async Task EnviarInvitacionAsync(Usuario usuario, ContextoCliente ctx, CancellationToken ct)
+    {
+        var enlace = await CrearEnlaceAsync(usuario.Id, VigenciaInvitacion, ct);
+        await _db.SaveChangesAsync(ct);
+        _correo.Encolar(usuario.Email, "Bienvenido al Sistema de Pedidos",
+            $"Hola {usuario.Nombre}:\n\nSe creó tu cuenta en el Sistema de Pedidos.\n\n" +
+            $"  Correo de acceso: {usuario.Email}\n  Código corporativo: {usuario.CodigoCorporativo}\n  Rol: {usuario.Rol}\n\n" +
+            $"Para activarla, crea tu contraseña con este enlace (vence en {VigenciaInvitacion.TotalHours:0} horas y funciona una sola vez):\n\n{enlace}\n\n" +
+            (usuario.DosFactor == MetodosDosFactor.Sms
+                ? "Por tu rol, al iniciar sesión te pediremos además un código enviado por SMS a tu teléfono registrado.\n"
+                : "") +
+            "Si no esperabas este correo, ignóralo.");
+    }
+
+    /// <summary>
+    /// Solo un enlace vigente por usuario: crear uno invalida los anteriores. En la BD se guarda solo la huella
+    /// del token, así que una filtración de la BD no sirve para usar el enlace.
+    /// </summary>
+    private async Task<string> CrearEnlaceAsync(int usuarioId, TimeSpan vigencia, CancellationToken ct)
+    {
+        await _db.TokensRecuperacion
+            .Where(t => t.UsuarioId == usuarioId && t.UsadoEn == null)
+            .ExecuteUpdateAsync(s => s.SetProperty(t => t.UsadoEn, Ahora), ct);
+
+        var token = Aleatorio.Token();
+        _db.TokensRecuperacion.Add(new TokenRecuperacion
+        {
+            UsuarioId = usuarioId,
+            TokenHash = _cifrador.Huella(token),
+            CreadoEn = Ahora,
+            ExpiraEn = Ahora + vigencia
+        });
+        return $"{_frontend.UrlPublica.TrimEnd('/')}/?restablecer={token}";
+    }
+
     public async Task RestablecerAsync(string token, string nuevaPassword, ContextoCliente ctx, CancellationToken ct)
     {
         var huella = _cifrador.Huella(token);
@@ -87,6 +114,8 @@ public class RecuperacionService
             throw new BusinessRuleException("El enlace no es válido o ya expiró. Solicita uno nuevo.");
 
         var usuario = await _db.Usuarios.FirstAsync(u => u.Id == registro.UsuarioId, ct);
+        if (!usuario.Activo)
+            throw new BusinessRuleException("El enlace no es válido o ya expiró. Solicita uno nuevo.");
         var error = await _politica.ValidarAsync(nuevaPassword, usuario.Email, ct);
         if (error is not null)
             throw new BusinessRuleException(error);
