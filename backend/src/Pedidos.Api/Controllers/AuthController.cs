@@ -105,8 +105,10 @@ public class AuthController : ControllerBase
             "Si el correo está registrado, recibirás un enlace para restablecer tu contraseña en unos minutos."));
     }
 
+    // Límite más holgado que "recuperar": el token es de 256 bits (no se puede adivinar) y el usuario
+    // puede equivocarse al elegir una contraseña que cumpla la política.
     [HttpPost("restablecer")]
-    [EnableRateLimiting(RateLimitPolicies.Recuperacion)]
+    [EnableRateLimiting(RateLimitPolicies.SegundoFactor)]
     [ProducesResponseType<MensajeResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ErrorResponse>(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Restablecer(RestablecerPasswordRequest request, CancellationToken ct)
