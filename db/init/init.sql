@@ -265,6 +265,20 @@ IF COL_LENGTH(N'dbo.Productos', N'Especificaciones') IS NULL
         CONSTRAINT CK_Productos_Especificaciones CHECK (ISJSON(Especificaciones) = 1);
 GO
 
+-- Galería de fotos del producto (hasta 5; Orden 0 = principal).
+IF OBJECT_ID(N'dbo.ProductoImagenes', N'U') IS NULL
+CREATE TABLE dbo.ProductoImagenes (
+    Id          INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_ProductoImagenes PRIMARY KEY,
+    ProductoId  INT            NOT NULL CONSTRAINT FK_ProductoImagenes_Productos REFERENCES dbo.Productos(Id) ON DELETE CASCADE,
+    Orden       INT            NOT NULL,
+    ContentType NVARCHAR(20)   NOT NULL CONSTRAINT CK_ProductoImagenes_Tipo CHECK (ContentType IN (N'image/jpeg', N'image/png', N'image/webp')),
+    Datos       VARBINARY(MAX) NOT NULL,
+    Tamano      INT            NOT NULL CONSTRAINT CK_ProductoImagenes_Tamano CHECK (Tamano BETWEEN 1 AND 2097152),
+    CreadoEn    DATETIME2      NOT NULL CONSTRAINT DF_ProductoImagenes_CreadoEn DEFAULT (SYSUTCDATETIME()),
+    INDEX IX_ProductoImagenes_Producto (ProductoId, Orden)
+);
+GO
+
 IF OBJECT_ID(N'dbo.Clientes', N'U') IS NULL
 CREATE TABLE dbo.Clientes (
     Id        INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_Clientes PRIMARY KEY,
@@ -505,6 +519,35 @@ UPDATE p SET Marca = f.Marca, Categoria = f.Categoria, Descripcion = f.Descripci
   ) AS f (Codigo, Marca, Categoria, Garantia, Descripcion, Especificaciones)
     ON f.Codigo = p.Codigo
  WHERE p.Descripcion IS NULL;
+GO
+
+-- Fotos de los productos semilla: 5 por producto, desde db/init/imagenes (montado en /db; créditos en CREDITOS.md).
+-- Solo a los productos que todavía no tienen ninguna foto.
+DECLARE @codigo NVARCHAR(20), @n INT, @sql NVARCHAR(MAX);
+DECLARE semilla CURSOR LOCAL FAST_FORWARD FOR
+    SELECT p.Codigo FROM dbo.Productos p
+     WHERE p.Codigo IN (N'P-001', N'P-002', N'P-003', N'P-004', N'P-005')
+       AND NOT EXISTS (SELECT 1 FROM dbo.ProductoImagenes i WHERE i.ProductoId = p.Id);
+OPEN semilla;
+FETCH NEXT FROM semilla INTO @codigo;
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    SET @n = 1;
+    WHILE @n <= 5
+    BEGIN
+        -- OPENROWSET(BULK) exige la ruta literal: se arma con dynamic SQL (el código viene de la tabla, no del usuario).
+        SET @sql = N'INSERT INTO dbo.ProductoImagenes (ProductoId, Orden, ContentType, Datos, Tamano)
+            SELECT p.Id, ' + CAST(@n - 1 AS NVARCHAR(2)) + N', N''image/jpeg'', f.BulkColumn, DATALENGTH(f.BulkColumn)
+              FROM dbo.Productos p
+             CROSS APPLY OPENROWSET(BULK ''/db/init/imagenes/' + @codigo + N'-' + CAST(@n AS NVARCHAR(2)) + N'.jpg'', SINGLE_BLOB) AS f
+             WHERE p.Codigo = N''' + @codigo + N''';';
+        EXEC sys.sp_executesql @sql;
+        SET @n += 1;
+    END
+    FETCH NEXT FROM semilla INTO @codigo;
+END
+CLOSE semilla;
+DEALLOCATE semilla;
 GO
 
 IF NOT EXISTS (SELECT 1 FROM dbo.Proveedores)

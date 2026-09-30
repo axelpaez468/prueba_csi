@@ -67,6 +67,43 @@ public class InventarioController : ControllerBase
     public Task<ProductoInventarioResponse> Editar(int id, GuardarProductoRequest request, CancellationToken ct) =>
         _inventario.EditarAsync(id, request, ct);
 
+    /// <summary>Solo productos sin ventas, compras ni movimientos; si no, hay que desactivarlo.</summary>
+    [HttpDelete("productos/{id:int}")]
+    [Authorize(Roles = Roles.GestionInventario)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ErrorResponse>(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Eliminar(int id, CancellationToken ct)
+    {
+        await _inventario.EliminarAsync(id, ct);
+        return NoContent();
+    }
+
+    /// <summary>Sube una foto (campo "archivo", JPG/PNG/WebP, hasta 2 MB; máximo 5 por producto). Devuelve los ids en orden.</summary>
+    [HttpPost("productos/{id:int}/imagenes")]
+    [Authorize(Roles = Roles.GestionInventario)]
+    [RequestSizeLimit(ProductoImagen.TamanoMaximo + 64 * 1024)]
+    [RequestFormLimits(MultipartBodyLengthLimit = ProductoImagen.TamanoMaximo + 64 * 1024)]
+    public async Task<List<int>> SubirImagen(int id, IFormFile? archivo, [FromServices] ImagenesService imagenes, CancellationToken ct)
+    {
+        if (archivo is null)
+            throw new BusinessRuleException("Adjunta la imagen en el campo \"archivo\".");
+        if (archivo.Length > ProductoImagen.TamanoMaximo)
+            throw new BusinessRuleException($"La imagen supera los {ProductoImagen.TamanoMaximo / 1024 / 1024} MB.");
+        using var memoria = new MemoryStream();
+        await archivo.CopyToAsync(memoria, ct);
+        return await imagenes.SubirAsync(id, memoria.ToArray(), ct);
+    }
+
+    [HttpDelete("productos/{id:int}/imagenes/{imagenId:int}")]
+    [Authorize(Roles = Roles.GestionInventario)]
+    public Task<List<int>> EliminarImagen(int id, int imagenId, [FromServices] ImagenesService imagenes, CancellationToken ct) =>
+        imagenes.EliminarAsync(id, imagenId, ct);
+
+    [HttpPost("productos/{id:int}/imagenes/{imagenId:int}/principal")]
+    [Authorize(Roles = Roles.GestionInventario)]
+    public Task<List<int>> ImagenPrincipal(int id, int imagenId, [FromServices] ImagenesService imagenes, CancellationToken ct) =>
+        imagenes.HacerPrincipalAsync(id, imagenId, ct);
+
     [HttpGet("productos/{id:int}/kardex")]
     public Task<KardexResponse> Kardex(int id, CancellationToken ct) => _inventario.KardexAsync(id, ct);
 

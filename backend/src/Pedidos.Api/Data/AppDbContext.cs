@@ -12,6 +12,7 @@ public class AppDbContext : DbContext
 
     public DbSet<Usuario> Usuarios => Set<Usuario>();
     public DbSet<Producto> Productos => Set<Producto>();
+    public DbSet<ProductoImagen> ProductoImagenes => Set<ProductoImagen>();
     public DbSet<Pedido> Pedidos => Set<Pedido>();
     public DbSet<PedidoDetalle> PedidoDetalles => Set<PedidoDetalle>();
     public DbSet<CodigoRespaldo> CodigosRespaldo => Set<CodigoRespaldo>();
@@ -166,6 +167,16 @@ public class AppDbContext : DbContext
 
     private static void ConfigurarErp(ModelBuilder model)
     {
+        model.Entity<ProductoImagen>(e =>
+        {
+            e.ToTable("ProductoImagenes");
+            e.Property(i => i.ContentType).HasMaxLength(20).IsRequired();
+            e.Property(i => i.Datos).IsRequired();
+            e.Property(i => i.CreadoEn).HasConversion(v => v, v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
+            e.HasOne<Producto>().WithMany().HasForeignKey(i => i.ProductoId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(i => new { i.ProductoId, i.Orden });
+        });
+
         model.Entity<Cliente>(e =>
         {
             e.ToTable("Clientes");

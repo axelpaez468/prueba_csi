@@ -66,6 +66,7 @@ builder.Services.AddScoped<Pedidos.Api.Services.Erp.InventarioService>();
 builder.Services.AddScoped<Pedidos.Api.Services.Erp.CompraService>();
 builder.Services.AddScoped<Pedidos.Api.Services.Erp.PanelService>();
 builder.Services.AddScoped<Pedidos.Api.Services.Erp.ReporteVentasService>();
+builder.Services.AddScoped<Pedidos.Api.Services.Erp.ImagenesService>();
 
 // Login de ERP: 2FA, recuperación de contraseña, bitácora y notificaciones.
 builder.Services.AddSingleton<Cifrador>();

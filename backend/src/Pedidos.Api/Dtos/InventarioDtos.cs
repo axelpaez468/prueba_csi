@@ -17,7 +17,9 @@ public record ProductoInventarioResponse(
     string? Categoria,
     string? Descripcion,
     int GarantiaMeses,
-    List<EspecificacionDto> Especificaciones);
+    List<EspecificacionDto> Especificaciones,
+    // Ids de las fotos, en orden; la primera es la principal.
+    List<int> Imagenes);
 
 /// <param name="Precio">Precio de venta con IVA incluido.</param>
 /// <param name="Codigo">Solo al crear; después no cambia (lo usan facturas y kardex).</param>

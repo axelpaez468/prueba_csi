@@ -42,7 +42,8 @@ public partial class InventarioService
         if (soloBajoMinimo)
             q = q.Where(p => p.Activo && p.StockMinimo > 0 && p.Stock <= p.StockMinimo);
         var productos = await q.OrderBy(p => p.Nombre).Take(1000).ToListAsync(ct);
-        return productos.Select(Mapear).ToList();
+        var imagenes = await ImagenesService.IdsPorProductoAsync(_db, productos.Select(p => p.Id), ct);
+        return productos.Select(p => Mapear(p, imagenes.GetValueOrDefault(p.Id))).ToList();
     }
 
     public async Task<ProductoInventarioResponse> CrearAsync(GuardarProductoRequest r, CancellationToken ct)
@@ -57,7 +58,7 @@ public partial class InventarioService
         Aplicar(producto, r);
         _db.Productos.Add(producto);
         await _db.SaveChangesAsync(ct);
-        return Mapear(producto);
+        return Mapear(producto, new List<int>());
     }
 
     public async Task<ProductoInventarioResponse> EditarAsync(int id, GuardarProductoRequest r, CancellationToken ct)
@@ -66,8 +67,29 @@ public partial class InventarioService
                        ?? throw new NoEncontradoException("Producto no encontrado.");
         Aplicar(producto, r);
         await _db.SaveChangesAsync(ct);
-        return Mapear(producto);
+        return await MapearAsync(producto, ct);
     }
+
+    /// <summary>
+    /// Solo se elimina un producto sin historia (nunca vendido, comprado ni con movimientos de kardex);
+    /// si ya la tiene, se desactiva para conservar facturas, kardex y contabilidad. Sus fotos se borran en cascada.
+    /// </summary>
+    public async Task EliminarAsync(int id, CancellationToken ct)
+    {
+        var producto = await _db.Productos.FirstOrDefaultAsync(p => p.Id == id, ct)
+                       ?? throw new NoEncontradoException("Producto no encontrado.");
+        var conHistoria = await _db.MovimientosInventario.AnyAsync(m => m.ProductoId == id, ct)
+                          || await _db.PedidoDetalles.AnyAsync(d => d.ProductoId == id, ct)
+                          || await _db.OrdenCompraDetalles.AnyAsync(d => d.ProductoId == id, ct);
+        if (conHistoria)
+            throw new BusinessRuleException(
+                $"'{producto.Nombre}' tiene ventas, compras o movimientos de inventario y no se puede eliminar. Desactívalo para quitarlo del catálogo.");
+        _db.Productos.Remove(producto);
+        await _db.SaveChangesAsync(ct);
+    }
+
+    private async Task<ProductoInventarioResponse> MapearAsync(Producto p, CancellationToken ct) =>
+        Mapear(p, (await ImagenesService.IdsPorProductoAsync(_db, new[] { p.Id }, ct)).GetValueOrDefault(p.Id));
 
     private static void Aplicar(Producto p, GuardarProductoRequest r)
     {
@@ -130,7 +152,7 @@ public partial class InventarioService
             .SelectMany(x => x.u.DefaultIfEmpty(), (x, u) => new { x.m, Usuario = u == null ? null : u.Username })
             .ToListAsync(ct);
 
-        return new KardexResponse(Mapear(producto), movimientos
+        return new KardexResponse(await MapearAsync(producto, ct), movimientos
             .OrderBy(x => x.m.Id)
             .Select(x => new MovimientoResponse(x.m.Id, x.m.Fecha, x.m.Tipo, x.m.Cantidad, x.m.CostoUnitario, x.m.Saldo,
                 x.m.CostoPromedio, x.m.Referencia, x.Usuario))
@@ -200,7 +222,7 @@ public partial class InventarioService
             movimiento.CostoUnitario, movimiento.Saldo, movimiento.CostoPromedio, movimiento.Referencia, usuario);
     }
 
-    public static ProductoInventarioResponse Mapear(Producto p)
+    public static ProductoInventarioResponse Mapear(Producto p, List<int>? imagenes)
     {
         decimal? margen = null;
         if (p.CostoPromedio > 0 && p.Precio > 0)
@@ -211,6 +233,7 @@ public partial class InventarioService
         return new ProductoInventarioResponse(p.Id, p.Codigo, p.Nombre, p.Precio, p.Stock, p.StockMinimo,
             Math.Round(p.CostoPromedio, 4), Montos.Redondear(p.Stock * p.CostoPromedio), p.Activo,
             p.Activo && p.StockMinimo > 0 && p.Stock <= p.StockMinimo, margen, p.Marca, p.Categoria, p.Descripcion,
-            p.GarantiaMeses, p.Especificaciones.Select(e => new EspecificacionDto(e.Nombre, e.Valor)).ToList());
+            p.GarantiaMeses, p.Especificaciones.Select(e => new EspecificacionDto(e.Nombre, e.Valor)).ToList(),
+            imagenes ?? new List<int>());
     }
 }
