@@ -71,10 +71,15 @@ flutter run -d chrome --web-port 8081 --dart-define=API_URL=http://localhost:508
 
 | Correo | Contraseña | Rol | 2FA | Puede |
 |---|---|---|---|---|
-| `vendedor@pedidos.local` | `Vendedor123!` | VENDEDOR | **Google Authenticator** (obligatorio; se configura con un QR en el primer ingreso) | Ver el catálogo, crear pedidos y ver **sus** pedidos |
-| `admin@pedidos.local` | `AdminPedidos2026!` | ADMIN | **Google Authenticator** (obligatorio; se configura con un QR en el primer ingreso) | Ver cualquier pedido, administrar usuarios y ver la bitácora; no crea pedidos |
+| `vendedor@pedidos.local` | `Vendedor123!` | VENDEDOR | Google Authenticator | Vender desde el catálogo (factura a un cliente o CF), clientes y **sus** ventas |
+| `admin@pedidos.local` | `AdminPedidos2026!` | ADMIN | Google Authenticator | Todos los módulos, usuarios y bitácora; no vende |
+| `bodega@pedidos.local` | `BodegaPedidos2026!` | BODEGA | Google Authenticator | Productos, existencias, ajustes, kardex y recepción de compras |
+| `compras@pedidos.local` | `ComprasPedidos2026!` | COMPRAS | Google Authenticator | Proveedores y órdenes de compra (crear y anular) |
+| `contador@pedidos.local` | `ContadorPedidos2026!` | CONTADOR | Google Authenticator | Catálogo de cuentas, partidas, libro mayor y estados financieros; consulta ventas, inventario y compras |
 
-**Cómo entrar la primera vez (vendedor o admin):** instala **Google Authenticator** en tu teléfono (gratis en Play Store o App Store). Después de la contraseña, el sistema muestra un **código QR**: escanéalo con la app (o escribe la clave que aparece debajo) y escribe el código de 6 dígitos que muestra la app. Al activarse aparecen **10 códigos de respaldo**: guárdalos, sirven si pierdes el teléfono. Desde entonces, cada inicio de sesión pide el código de la app (salvo que marques "Confiar en este dispositivo por 30 días").
+El 2FA es obligatorio para todos: se configura con un QR en el primer ingreso.
+
+**Cómo entrar la primera vez (cualquier rol):** instala **Google Authenticator** en tu teléfono (gratis en Play Store o App Store). Después de la contraseña, el sistema muestra un **código QR**: escanéalo con la app (o escribe la clave que aparece debajo) y escribe el código de 6 dígitos que muestra la app. Al activarse aparecen **10 códigos de respaldo**: guárdalos, sirven si pierdes el teléfono. Desde entonces, cada inicio de sesión pide el código de la app (salvo que marques "Confiar en este dispositivo por 30 días").
 
 Productos semilla: 5, entre ellos el **Monitor 27" con stock 1**, para probar la concurrencia, y la **Webcam HD con stock 0**, que aparece deshabilitada en el catálogo.
 Son credenciales de prueba y están guardadas como hash BCrypt en `init.sql`. La contraseña del vendedor es anterior a la política nueva: si se cambia, la nueva debe cumplirla.
@@ -125,23 +130,35 @@ for i in $(seq 1 10); do curl -s -o /dev/null -w "%{http_code}\n" -X POST http:/
 |---|---|---|---|
 | POST | `/api/auth/login` | Público (10 intentos/min por IP) | 200 `{ token, expiraEn, username, email, rol }` o, con 2FA, 200 `{ requiereSegundoFactor: true, desafio, metodo, destino }` · 400 · 401 · 429 |
 | POST | `/api/auth/login/verificar` | Público (con el desafío) | 200 sesión (+ `tokenDispositivo` si se pidió confiar en el dispositivo) · 401 código incorrecto · 400 desafío vencido |
-| POST | `/api/auth/login/reenviar` | Público (con el desafío) | 200 · 400 si no pasaron 30 s |
 | POST | `/api/auth/recuperar` | Público (5 cada 15 min por IP) | 202, siempre la misma respuesta (no revela si el correo existe) |
 | POST | `/api/auth/restablecer` | Público (con el token del correo) | 200 · 400 enlace vencido o usado, o contraseña que no cumple la política |
 | GET/POST | `/api/cuenta/...` | Autenticado | Estado de seguridad, cambio de contraseña, activar/desactivar Google Authenticator, códigos de respaldo, accesos propios |
 | GET | `/api/admin/bitacora` | ADMIN | Últimos 100 eventos de seguridad de todos los usuarios |
 | GET/POST/PUT/DELETE | `/api/admin/usuarios[/{id}]` | ADMIN | Listar (`?buscar=`), crear (envía invitación), editar, `/activar`, `/desactivar`, `/invitacion`, eliminar (solo sin pedidos) · 400 validación · 403 no admin · 404 |
-| GET | `/api/productos` | Autenticado | 200 `[{ id, codigo, nombre, precio, stock }]` · 401 |
-| POST | `/api/pedidos` | VENDEDOR | 201 `{ numero, fecha, usuarioId, total, lineas[] }` · 400 · 401 · 403 |
-| GET | `/api/pedidos/{id}` | Dueño o ADMIN | 200 · 401 · 404 |
+| GET | `/api/productos` | Autenticado | 200 `[{ id, codigo, nombre, precio, stock }]` (solo productos activos) · 401 |
+| POST | `/api/pedidos` | VENDEDOR | 201 `{ numero, fecha, usuarioId, total, lineas[], serie, autorizacion, clienteNit, baseImponible, iva, ... }` · 400 · 401 · 403. Acepta `clienteId` (sin él: CF) y `formaPago` (`EFECTIVO`, `TARJETA`, `TRANSFERENCIA`) |
+| GET | `/api/pedidos?desde=&hasta=` | VENDEDOR (las suyas), ADMIN, CONTADOR | Facturas del rango (por defecto, el mes) |
+| GET | `/api/pedidos/{id}` | Dueño, ADMIN o CONTADOR | 200 · 401 · 404 |
+| GET/POST/PUT | `/api/clientes[/{id}]` | VENDEDOR, ADMIN | Buscar (`?buscar=` NIT o nombre), crear y editar · 400 NIT inválido o repetido |
+| GET/POST/PUT | `/api/inventario/productos[/{id}]` | Consulta: BODEGA, ADMIN, COMPRAS, CONTADOR · cambios: BODEGA, ADMIN | Existencias valorizadas (`?bajoMinimo=true`), alta y edición de productos |
+| GET | `/api/inventario/productos/{id}/kardex` | Igual que la consulta | Movimientos con saldo y costo promedio |
+| POST | `/api/inventario/ajustes` | BODEGA, ADMIN | Entrada o salida con motivo · 400 si no alcanza la existencia |
+| GET/POST/PUT | `/api/compras/proveedores[/{id}]` | Consulta: BODEGA, COMPRAS, ADMIN, CONTADOR · cambios: COMPRAS, ADMIN | Proveedores con NIT validado |
+| GET/POST | `/api/compras/ordenes[/{id}]` | Consulta: igual · crear: COMPRAS, ADMIN | Órdenes de compra (`?estado=PENDIENTE`) |
+| POST | `/api/compras/ordenes/{id}/recibir` | BODEGA, COMPRAS, ADMIN | `{ facturaProveedor }` → entra al inventario y se paga · 400 si ya no está pendiente |
+| POST | `/api/compras/ordenes/{id}/anular` | COMPRAS, ADMIN | Solo órdenes pendientes |
+| GET/POST/PUT | `/api/contabilidad/cuentas[/{id}]` | CONTADOR, ADMIN | Catálogo con saldos; las cuentas del sistema no se desactivan |
+| GET/POST | `/api/contabilidad/partidas[/{id}]` | CONTADOR, ADMIN | Libro diario (`?desde=&hasta=&origen=`) y partidas manuales · 400 si no cuadran |
+| GET | `/api/contabilidad/reportes/{mayor/{cuentaId} \| balance-comprobacion \| estado-resultados \| balance-general}` | CONTADOR, ADMIN | Libro mayor y estados financieros (`?desde=&hasta=`; balance general `?al=`) |
+| GET | `/api/panel` | ADMIN, BODEGA, COMPRAS, CONTADOR | Indicadores del inicio |
 
 Todos los errores tienen el mismo formato: `{ "error": "mensaje legible" }`.
 
 ### Pruebas automatizadas
 
 ```bash
-cd backend && dotnet test      # 75 pruebas (1 se omite si no hay SQL Server; ver abajo)
-cd frontend && flutter test    # 80 pruebas
+cd backend && dotnet test      # 132 pruebas (1 se omite si no hay SQL Server; ver abajo)
+cd frontend && flutter test    # 165 pruebas
 ```
 
 - **Backend:** usa SQLite en memoria, que a diferencia del proveedor InMemory de EF soporta transacciones reales, `ExecuteUpdate` y *check constraints*. Cubre: precio/total calculados en el servidor aunque el cliente los envíe; descuento de stock; rollback completo si una línea falla; última unidad vendida una sola vez; cantidad ≤ 0; producto inexistente; producto duplicado; pedido vacío; pedido ajeno no visible; y login válido/inválido.
@@ -259,6 +276,35 @@ Extensión opcional. Todas las piezas son gratuitas y funcionan con `docker comp
 
 ---
 
+## 5 ter. ERP: ventas, inventario, compras y contabilidad (fuera del alcance del PDF)
+
+Cada rol ve solo sus módulos (menú **Módulos** en la barra superior). El vendedor empieza en el catálogo; los demás, en un **panel** con ventas del día y del mes, utilidad bruta, valor del inventario, órdenes pendientes y productos por reabastecer.
+
+| Módulo | Qué hace | Reglas importantes |
+|---|---|---|
+| **Ventas** | Venta de contado a un cliente (NIT) o a consumidor final (CF), con **factura simulada** (serie A, número y autorización). | Precios con **IVA 12 % incluido**: el sistema separa la base y el IVA y la suma siempre da el total exacto. Forma de pago: efectivo (Caja) o tarjeta/transferencia (Bancos). |
+| **Clientes y proveedores** | Altas, búsqueda por NIT o nombre, activar o desactivar. | El **NIT se valida con su dígito verificador** (módulo 11; el 10 se escribe K) y es único. "CF" es del sistema. |
+| **Inventario** | Productos, existencias valorizadas, stock mínimo, **kardex** y ajustes (conteo físico, daño, sobrante). | **Costo promedio ponderado**: cada entrada lo recalcula en el mismo `UPDATE` que suma la existencia, así dos operaciones simultáneas no dejan un costo incorrecto. La existencia solo cambia con movimientos: no se edita a mano. |
+| **Compras** | Órdenes de compra a proveedores (costos sin IVA) → **recepción en bodega** con la factura del proveedor → pago de contado desde Bancos. | La recepción es condicional (`WHERE Estado = 'PENDIENTE'`): si dos personas reciben la misma orden a la vez, solo una lo logra y el inventario no se duplica. |
+| **Contabilidad** | Catálogo de cuentas, **libro diario**, partidas manuales, **libro mayor**, balance de comprobación, estado de resultados y balance general. | Cada venta, compra y ajuste genera su **partida automática en la misma transacción**: si algo falla no queda nada a medias. Toda partida debe cuadrar (debe = haber); la BD además impide líneas con debe y haber a la vez. |
+
+**Partidas automáticas**
+
+| Operación | Debe | Haber |
+|---|---|---|
+| Venta | Caja o Bancos (total) · Costo de ventas (costo) | Ventas (base sin IVA) · IVA por pagar · Inventario (costo) |
+| Recepción de compra | Inventario (subtotal) · IVA por cobrar | Bancos (total) |
+| Ajuste de salida | Faltantes y mermas de inventario | Inventario |
+| Ajuste de entrada | Inventario | Otros ingresos |
+
+**Apertura.** Al migrar, `init.sql` da un costo inicial a los productos que no lo tienen, registra la existencia en el kardex (`INICIAL`) y crea la **partida de apertura** (Q100,000 en Bancos más el inventario, contra Capital). Así inventario y contabilidad arrancan cuadrados. Las ventas anteriores al ERP quedan asignadas a CF y sin partida.
+
+**Probarlo:**
+1. Entra como **compras** y crea una orden.
+2. Entra como **bodega** y recíbela: mira el kardex y el nuevo costo promedio.
+3. Entra como **vendedor**, vende a un cliente con NIT y revisa la factura.
+4. Entra como **contador**: la venta y la compra ya están en el libro diario, y el balance general cuadra.
+
 ## 6. Pendiente y posibles mejoras
 
 | Tema | Estado y cómo se resolvería |
@@ -271,6 +317,11 @@ Extensión opcional. Todas las piezas son gratuitas y funcionan con `docker comp
 | Rate limit distribuido | Los límites y el bloqueo de cuentas son en memoria (por instancia). Con varias réplicas irían en Redis o en el gateway. |
 | Observabilidad | Logs estructurados y *health checks* de dependencias (`/health` hoy no consulta la BD). |
 | Paginación del catálogo | No hace falta con 5 productos; con catálogos grandes: `?page=&size=` y búsqueda. |
+| ERP: anular ventas | Hoy una factura no se anula. Se haría con una nota de crédito que devuelva la existencia y registre la partida inversa. |
+| ERP: crédito | Ventas y compras son de contado. Al crédito se agregarían cuentas por cobrar y por pagar, abonos y antigüedad de saldos. |
+| ERP: FEL real | La factura es una simulación. En producción se certificaría con un certificador autorizado por la SAT (XML firmado, UUID oficial). |
+| ERP: cierre contable | No hay cierre de período: el resultado del ejercicio se acumula en el balance general. Se agregaría el cierre mensual o anual, que traslada la utilidad a resultados acumulados y bloquea el período. |
+| ERP: recepción parcial | Una orden se recibe completa. Para recibirla por partes haría falta registrar la cantidad recibida por línea. |
 
 ---
 
