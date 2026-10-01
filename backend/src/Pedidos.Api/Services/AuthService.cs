@@ -233,10 +233,15 @@ public class AuthService
                 UsuarioId = usuario.Id, Huella = huella, PrimerAcceso = Ahora, UltimoAcceso = Ahora
             });
             _bitacora.Registrar(EventosBitacora.DispositivoNuevo, true, usuario.Email, ctx, usuario.Id, ctx.Dispositivo);
-            _correo.Encolar(usuario.Email, "Nuevo inicio de sesión en tu cuenta",
-                $"Hola {usuario.Username}:\n\nSe inició sesión en tu cuenta desde un dispositivo nuevo.\n\n" +
-                $"  Dispositivo: {ctx.Dispositivo}\n  IP: {ctx.Ip ?? "desconocida"}\n  Fecha: {Ahora:dd/MM/yyyy HH:mm} UTC\n\n" +
-                "Si fuiste tú, no necesitas hacer nada. Si no reconoces este acceso, cambia tu contraseña de inmediato.");
+            _correo.Encolar(usuario.Email, new PlantillaCorreo(
+                "Nuevo inicio de sesión en tu cuenta",
+                "Nuevo inicio de sesión",
+                $"Hola {usuario.Nombre}:",
+                new[] { "Se inició sesión en tu cuenta del Sistema de Pedidos desde un dispositivo que no habíamos visto antes." },
+                TipoCorreo.Seguridad,
+                new[] { ("Dispositivo", ctx.Dispositivo), ("Dirección IP", ctx.Ip ?? "desconocida"), ("Fecha", PlantillaCorreo.Hora(Ahora)) },
+                Aviso: "Si fuiste tú, no necesitas hacer nada. Si no reconoces este acceso, cambia tu contraseña de inmediato " +
+                       "desde \"Seguridad de la cuenta\" o avisa al administrador."));
         }
         else
         {

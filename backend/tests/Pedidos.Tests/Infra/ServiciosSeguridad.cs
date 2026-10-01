@@ -19,7 +19,8 @@ public class CorreoFalso : IEnviadorCorreo
 {
     public List<Mensaje> Enviados { get; } = new();
 
-    public void Encolar(string para, string asunto, string texto) => Enviados.Add(new Mensaje(para, asunto, texto));
+    public void Encolar(string para, string asunto, string texto, string? html = null) =>
+        Enviados.Add(new Mensaje(para, asunto, texto, html));
 
     public string UltimoTokenRecuperacion() =>
         Regex.Match(Enviados.Last(m => m.Asunto.Contains("Restablece")).Texto, @"restablecer=([\w-]+)").Groups[1].Value;

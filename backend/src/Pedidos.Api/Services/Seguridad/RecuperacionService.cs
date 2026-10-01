@@ -61,11 +61,17 @@ public class RecuperacionService
         if (procede)
         {
             var enlace = await CrearEnlaceAsync(usuario!.Id, VigenciaEnlace, ct);
-            _correo.Encolar(usuario.Email, "Restablece tu contraseña",
-                $"Hola {usuario.Username}:\n\nRecibimos una solicitud para restablecer tu contraseña. " +
-                $"Abre este enlace (vence en {VigenciaEnlace.TotalMinutes:0} minutos y funciona una sola vez):\n\n{enlace}\n\n" +
-                $"Solicitud desde: {ctx.Dispositivo}, IP {ctx.Ip ?? "desconocida"}.\n" +
-                "Si no fuiste tú, ignora este correo: tu contraseña no cambiará.");
+            _correo.Encolar(usuario.Email, new PlantillaCorreo(
+                "Restablece tu contraseña",
+                "Restablece tu contraseña",
+                $"Hola {usuario.Nombre}:",
+                new[] { "Recibimos una solicitud para restablecer la contraseña de tu cuenta. Usa el botón para crear una nueva." },
+                TipoCorreo.Seguridad,
+                new[] { ("Solicitado desde", ctx.Dispositivo), ("Dirección IP", ctx.Ip ?? "desconocida") },
+                "Crear una nueva contraseña",
+                enlace,
+                $"El enlace vence en {VigenciaEnlace.TotalMinutes:0} minutos y funciona una sola vez.",
+                "Si no fuiste tú, ignora este correo: tu contraseña no cambiará."));
         }
 
         await _db.SaveChangesAsync(ct);
@@ -78,15 +84,21 @@ public class RecuperacionService
         var enlace = await CrearEnlaceAsync(usuario.Id, VigenciaInvitacion, ct,
             invitacion: !UsuarioService.TieneContrasena(usuario));
         await _db.SaveChangesAsync(ct);
-        _correo.Encolar(usuario.Email, "Bienvenido al Sistema de Pedidos",
-            $"Hola {usuario.Nombre}:\n\nSe creó tu cuenta en el Sistema de Pedidos.\n\n" +
-            $"  Correo de acceso: {usuario.Email}\n  Código corporativo: {usuario.CodigoCorporativo}\n  Rol: {usuario.Rol}\n\n" +
-            $"Para activarla, crea tu contraseña con este enlace (vence en {VigenciaInvitacion.TotalHours:0} horas y funciona una sola vez):\n\n{enlace}\n\n" +
-            (usuario.DosFactorObligatorio
-                ? "En tu primer inicio de sesión configurarás la verificación en dos pasos con Google Authenticator " +
-                  "(descárgala gratis en tu teléfono).\n"
-                : "") +
-            "Si no esperabas este correo, ignóralo.");
+        var parrafos = new List<string> { "Se creó tu cuenta en el Sistema de Pedidos. Para activarla, crea tu propia contraseña con el botón." };
+        if (usuario.DosFactorObligatorio)
+            parrafos.Add("En tu primer inicio de sesión configurarás la verificación en dos pasos con Google Authenticator " +
+                         "(gratis en Play Store o App Store): ten tu teléfono a mano.");
+        _correo.Encolar(usuario.Email, new PlantillaCorreo(
+            "Bienvenido al Sistema de Pedidos",
+            "¡Bienvenido al equipo!",
+            $"Hola {usuario.Nombre}:",
+            parrafos,
+            TipoCorreo.Informativo,
+            new[] { ("Correo de acceso", usuario.Email), ("Código corporativo", usuario.CodigoCorporativo), ("Rol", NombreRol(usuario.Rol)) },
+            "Crear mi contraseña",
+            enlace,
+            $"El enlace vence en {VigenciaInvitacion.TotalHours:0} horas y funciona una sola vez.",
+            "Si no esperabas este correo, ignóralo."));
     }
 
     /// <summary>
@@ -133,15 +145,31 @@ public class RecuperacionService
 
         if (activacion)
         {
-            _correo.Encolar(usuario.Email, "Tu cuenta está activa",
-                $"Hola {usuario.Nombre}:\n\nCreaste tu contraseña y tu cuenta del Sistema de Pedidos quedó activa. " +
-                "Al iniciar sesión configurarás Google Authenticator.\n\nSi no fuiste tú, contacta al administrador de inmediato.");
+            _correo.Encolar(usuario.Email, new PlantillaCorreo(
+                "Tu cuenta está activa",
+                "Tu cuenta está activa",
+                $"Hola {usuario.Nombre}:",
+                new[]
+                {
+                    "Creaste tu contraseña y tu cuenta del Sistema de Pedidos quedó lista.",
+                    "Al iniciar sesión configurarás Google Authenticator: escanea el código QR con la app y escribe el código de 6 dígitos."
+                },
+                TipoCorreo.Exito,
+                new[] { ("Correo de acceso", usuario.Email) },
+                "Iniciar sesión",
+                _frontend.UrlPublica,
+                Aviso: "Si no fuiste tú, contacta al administrador de inmediato."));
             return;
         }
 
-        _correo.Encolar(usuario.Email, "Tu contraseña fue cambiada",
-            $"Hola {usuario.Username}:\n\nLa contraseña de tu cuenta se restableció el {Ahora:dd/MM/yyyy HH:mm} UTC. " +
-            "Se cerraron las sesiones abiertas en otros dispositivos.\n\nSi no fuiste tú, contacta al administrador de inmediato.");
+        _correo.Encolar(usuario.Email, new PlantillaCorreo(
+            "Tu contraseña fue cambiada",
+            "Restableciste tu contraseña",
+            $"Hola {usuario.Nombre}:",
+            new[] { "La contraseña de tu cuenta se restableció con el enlace que te enviamos. Cerramos las sesiones abiertas en otros dispositivos." },
+            TipoCorreo.Seguridad,
+            new[] { ("Fecha", PlantillaCorreo.Hora(Ahora)), ("Desde", ctx.Dispositivo) },
+            Aviso: "Si no fuiste tú, contacta al administrador de inmediato."));
     }
 
     /// <summary>
@@ -154,4 +182,14 @@ public class RecuperacionService
         usuario.VersionSesion++;
         await db.DispositivosConfiables.Where(d => d.UsuarioId == usuario.Id).ExecuteDeleteAsync(ct);
     }
+
+    private static string NombreRol(string rol) => rol switch
+    {
+        Roles.Vendedor => "Vendedor",
+        Roles.Admin => "Administrador",
+        Roles.Bodega => "Bodega",
+        Roles.Compras => "Compras",
+        Roles.Contador => "Contador",
+        _ => rol
+    };
 }

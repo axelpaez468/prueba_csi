@@ -32,11 +32,12 @@ public class CorreoOptions
     };
 }
 
-public record Mensaje(string Para, string Asunto, string Texto);
+/// <param name="Html">Versión con diseño (ver <see cref="PlantillaCorreo"/>); si es null se envía solo el texto.</param>
+public record Mensaje(string Para, string Asunto, string Texto, string? Html = null);
 
 public interface IEnviadorCorreo
 {
-    void Encolar(string para, string asunto, string texto);
+    void Encolar(string para, string asunto, string texto, string? html = null);
 }
 
 /// <summary>
@@ -50,8 +51,8 @@ public class ColaNotificaciones : IEnviadorCorreo
 
     public ChannelReader<Mensaje> Lector => _canal.Reader;
 
-    public void Encolar(string para, string asunto, string texto) =>
-        _canal.Writer.TryWrite(new Mensaje(para, asunto, texto));
+    public void Encolar(string para, string asunto, string texto, string? html = null) =>
+        _canal.Writer.TryWrite(new Mensaje(para, asunto, texto, html));
 }
 
 /// <summary>Envía por SMTP los mensajes encolados, con reintentos.</summary>
@@ -96,7 +97,8 @@ public class ProcesadorNotificaciones : BackgroundService
         correo.From.Add(new MailboxAddress("Sistema de Pedidos", _opciones.Remitente));
         correo.To.Add(MailboxAddress.Parse(m.Para));
         correo.Subject = m.Asunto;
-        correo.Body = new TextPart("plain") { Text = m.Texto };
+        // multipart/alternative: el cliente muestra el HTML y, si no puede, el texto plano.
+        correo.Body = new BodyBuilder { TextBody = m.Texto, HtmlBody = m.Html }.ToMessageBody();
 
         using var smtp = new SmtpClient { Timeout = 10_000 };
         await smtp.ConnectAsync(_opciones.Host, _opciones.Puerto, _opciones.ModoTls, ct);

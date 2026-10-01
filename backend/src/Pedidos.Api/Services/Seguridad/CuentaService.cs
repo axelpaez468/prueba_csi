@@ -69,9 +69,14 @@ public class CuentaService
         _bitacora.Registrar(EventosBitacora.PasswordCambiada, true, u.Email, ctx, u.Id);
         await _db.SaveChangesAsync(ct);
 
-        _correo.Encolar(u.Email, "Tu contraseña fue cambiada",
-            $"Hola {u.Username}:\n\nCambiaste la contraseña de tu cuenta desde {ctx.Dispositivo}. " +
-            "Se cerraron las sesiones en otros dispositivos.\n\nSi no fuiste tú, contacta al administrador de inmediato.");
+        _correo.Encolar(u.Email, new PlantillaCorreo(
+            "Tu contraseña fue cambiada",
+            "Cambiaste tu contraseña",
+            $"Hola {u.Nombre}:",
+            new[] { "La contraseña de tu cuenta se cambió correctamente. Por seguridad, cerramos las sesiones abiertas en otros dispositivos." },
+            TipoCorreo.Seguridad,
+            new[] { ("Desde", ctx.Dispositivo), ("Dirección IP", ctx.Ip ?? "desconocida") },
+            Aviso: "Si no fuiste tú, contacta al administrador de inmediato."));
         return _tokens.Generar(u);
     }
 
@@ -96,9 +101,18 @@ public class CuentaService
 
         _bitacora.Registrar(EventosBitacora.DosFactorActivado, true, u.Email, ctx, u.Id, MetodosDosFactor.Totp);
         await _db.SaveChangesAsync(ct);
-        _correo.Encolar(u.Email, "Verificación en dos pasos activada",
-            $"Hola {u.Username}:\n\nActivaste la verificación en dos pasos con Google Authenticator. " +
-            "Guarda tus códigos de respaldo en un lugar seguro.");
+        _correo.Encolar(u.Email, new PlantillaCorreo(
+            "Verificación en dos pasos activada",
+            "Tu cuenta está más protegida",
+            $"Hola {u.Nombre}:",
+            new[]
+            {
+                "Activaste la verificación en dos pasos con Google Authenticator. Desde ahora, además de tu contraseña, " +
+                "te pediremos el código de 6 dígitos de la app al iniciar sesión.",
+                "Guarda tus códigos de respaldo en un lugar seguro: son la única forma de entrar si pierdes el teléfono."
+            },
+            TipoCorreo.Exito,
+            Aviso: "Si no activaste esta opción, cambia tu contraseña y avisa al administrador."));
         return new CodigosRespaldoResponse(codigos);
     }
     // ---------- Desactivar y códigos de respaldo ----------
@@ -120,9 +134,14 @@ public class CuentaService
         _bitacora.Registrar(EventosBitacora.DosFactorDesactivado, true, u.Email, ctx, u.Id);
         await _db.SaveChangesAsync(ct);
 
-        _correo.Encolar(u.Email, "Verificación en dos pasos desactivada",
-            $"Hola {u.Username}:\n\nSe desactivó la verificación en dos pasos de tu cuenta desde {ctx.Dispositivo}. " +
-            "Si no fuiste tú, cambia tu contraseña de inmediato.");
+        _correo.Encolar(u.Email, new PlantillaCorreo(
+            "Verificación en dos pasos desactivada",
+            "Se desactivó la verificación en dos pasos",
+            $"Hola {u.Nombre}:",
+            new[] { "Tu cuenta ya no pide el código de Google Authenticator al iniciar sesión." },
+            TipoCorreo.Seguridad,
+            new[] { ("Desde", ctx.Dispositivo), ("Dirección IP", ctx.Ip ?? "desconocida") },
+            Aviso: "Si no fuiste tú, cambia tu contraseña de inmediato."));
         return _tokens.Generar(u);
     }
 
