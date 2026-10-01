@@ -140,7 +140,11 @@ for i in $(seq 1 10); do curl -s -o /dev/null -w "%{http_code}\n" -X POST http:/
 | GET | `/api/productos/{id}/imagenes/{imagenId}` | **Público** | La foto (JPG/PNG/WebP), con caché de 7 días · 404 |
 | DELETE | `/api/inventario/productos/{id}` | BODEGA, ADMIN | 204 · 400 si tiene ventas, compras o movimientos (hay que desactivarlo) |
 | POST/DELETE | `/api/inventario/productos/{id}/imagenes[/{imagenId}]` | BODEGA, ADMIN | Subir (multipart, campo `archivo`, hasta 2 MB y 5 por producto) o eliminar una foto; `POST .../{imagenId}/principal` la pone primera |
-| POST | `/api/pedidos` | VENDEDOR | 201 `{ numero, fecha, usuarioId, total, lineas[], serie, autorizacion, clienteNit, baseImponible, iva, ... }` · 400 · 401 · 403. Acepta `clienteId` (sin él: CF) y `formaPago` (`EFECTIVO`, `TARJETA`, `TRANSFERENCIA`) |
+| POST | `/api/pedidos` | VENDEDOR | 201 `{ numero, fecha, usuarioId, total, lineas[], serie, autorizacion, clienteNit, baseImponible, iva, ... }` · 400 · 401 · 403. Acepta `clienteId` (sin él: CF), `formaPago` (`EFECTIVO`, `TARJETA`, `TRANSFERENCIA`) y la entrega: `direccionEntrega`, `departamento` y `municipio` (validados contra `/api/geografia`) |
+| GET | `/api/geografia` | Autenticado | Los 22 departamentos de Guatemala con sus 340 municipios (para los selectores) |
+| GET | `/api/pipeline` | VENDEDOR (las suyas), ADMIN, CONTADOR, BODEGA | Tablero por etapas; cada tarjeta dice a qué etapa puede llevarla el usuario |
+| GET | `/api/pipeline/{id}` | Igual | Venta con su entrega e historial de etapas |
+| POST | `/api/pipeline/{id}/avanzar` | Según la etapa | `{ nota? }` → siguiente etapa · 400 si al rol no le toca o ya está entregada |
 | GET | `/api/pedidos?desde=&hasta=` | VENDEDOR (las suyas), ADMIN, CONTADOR | Facturas del rango (por defecto, el mes) |
 | GET | `/api/pedidos/{id}` | Dueño, ADMIN o CONTADOR | 200 · 401 · 404 |
 | GET/POST/PUT | `/api/clientes[/{id}]` | VENDEDOR, ADMIN | Buscar (`?buscar=` NIT o nombre), crear y editar · 400 NIT inválido o repetido |
@@ -162,8 +166,8 @@ Todos los errores tienen el mismo formato: `{ "error": "mensaje legible" }`.
 ### Pruebas automatizadas
 
 ```bash
-cd backend && dotnet test      # 148 pruebas (1 se omite si no hay SQL Server; ver abajo)
-cd frontend && flutter test    # 190 pruebas
+cd backend && dotnet test      # 162 pruebas (1 se omite si no hay SQL Server; ver abajo)
+cd frontend && flutter test    # 210 pruebas
 ```
 
 - **Backend:** usa SQLite en memoria, que a diferencia del proveedor InMemory de EF soporta transacciones reales, `ExecuteUpdate` y *check constraints*. Cubre: precio/total calculados en el servidor aunque el cliente los envíe; descuento de stock; rollback completo si una línea falla; última unidad vendida una sola vez; cantidad ≤ 0; producto inexistente; producto duplicado; pedido vacío; pedido ajeno no visible; y login válido/inválido.
@@ -289,6 +293,8 @@ Cada rol ve solo sus módulos (menú **Módulos** en la barra superior). El vend
 |---|---|---|
 | **Ventas** | Venta de contado a un cliente (NIT) o a consumidor final (CF), con **factura simulada** (serie A, número y autorización). | Precios con **IVA 12 % incluido**: el sistema separa la base y el IVA y la suma siempre da el total exacto. Forma de pago: efectivo (Caja) o tarjeta/transferencia (Bancos). |
 | **Clientes y proveedores** | Altas, búsqueda por NIT o nombre, activar o desactivar. | El **NIT se valida con su dígito verificador** (módulo 11; el 10 se escribe K) y es único. "CF" es del sistema. |
+| **Entrega y pipeline** | Cada venta lleva dirección, **departamento y municipio** (selectores; el municipio depende del departamento) y pasa por etapas: **Nuevo → Revisado → Autorizado → Despachado → En camino → Entregado/cobrado**. Tablero tipo kanban con el botón de la siguiente etapa, línea de tiempo en el detalle y alerta de ventas con 2 o más días en una etapa. | Cada etapa la mueve su rol: el vendedor revisa (solo las suyas), administración o contabilidad autoriza y bodega despacha, envía y entrega. Solo se avanza un paso a la vez, con cambio condicional (dos personas no la mueven a la vez) y queda historial con quién, cuándo y una nota. |
+| **Mapa de ventas** | En Reportes de ventas: mapa de Guatemala coloreado por ventas de cada departamento; al pasar el mouse o tocar uno muestra ventas, facturas, unidades y el **producto más vendido** ahí. También la distribución de las ventas por etapa. | Límites de geoBoundaries / OpenStreetMap (ODbL, créditos en `frontend/assets/mapas/CREDITOS.md`). |
 | **Reportes de ventas** | Ventas, facturas, ticket promedio, utilidad bruta y margen, IVA cobrado; variación contra el período anterior; ventas por día; ranking por producto, categoría, vendedor, cliente y forma de pago con su participación. Períodos rápidos: hoy, semana, mes, mes anterior y año. | El vendedor ve solo sus ventas. La utilidad se calcula sin IVA con el costo promedio de cada venta. |
 | **Productos (CRUD) y fotos** | Alta, edición de la ficha, hasta **5 fotos** por producto (subir, elegir la principal, eliminar), activar/desactivar y eliminar. En la ficha, las fotos se ven en un **carrusel** que avanza solo (se pausa con el mouse encima; flechas, puntos y miniaturas). El catálogo abre con un carrusel de **destacados**. | El formato se valida por la firma de los bytes (no por la extensión). Solo se elimina un producto sin ventas, compras ni movimientos; si ya tiene historia se desactiva. Las 25 fotos de ejemplo son de Wikimedia Commons con licencias libres (créditos en `db/init/imagenes/CREDITOS.md`). |
 | **Ficha del producto** | Marca, categoría, descripción detallada (con párrafos), garantía y especificaciones técnicas. En el catálogo, tocar la foto o el nombre abre la ficha; también se filtra por categoría. | Se edita desde Inventario (BODEGA/ADMIN). Hasta 2000 caracteres de descripción y 20 especificaciones sin nombres repetidos. |
@@ -306,6 +312,8 @@ Cada rol ve solo sus módulos (menú **Módulos** en la barra superior). El vend
 | Ajuste de entrada | Inventario | Otros ingresos |
 
 **Apertura.** Al migrar, `init.sql` da un costo inicial a los productos que no lo tienen, registra la existencia en el kardex (`INICIAL`) y crea la **partida de apertura** (Q100,000 en Bancos más el inventario, contra Capital). Así inventario y contabilidad arrancan cuadrados. Las ventas anteriores al ERP quedan asignadas a CF y sin partida.
+
+**Datos de demostración.** Con `DEMO_GENERAR=true` (valor por defecto en Docker), la API genera al arrancar por primera vez 20 productos más, 24 clientes repartidos por el país, 3 vendedores y **120 días de operación**: compras semanales recibidas en bodega, unas 750 ventas con entrega, su avance por el pipeline, gastos fijos mensuales y depósitos semanales. Todo se registra con los mismos servicios de la app, así que inventario, kardex y contabilidad quedan cuadrados. Tarda 1 a 2 minutos en segundo plano y no se repite (busca el producto `P-006`). Los vendedores generados no tienen contraseña: el administrador puede enviarles la invitación.
 
 **Probarlo:**
 1. Entra como **compras** y crea una orden.

@@ -12,6 +12,7 @@ import '../clientes/clientes_screen.dart';
 import '../order/order_confirmation_screen.dart';
 import '../shell/app_top_bar.dart';
 import 'cart_controller.dart';
+import 'entrega_form.dart';
 
 class CartScreen extends StatelessWidget {
   const CartScreen({super.key});
@@ -283,6 +284,8 @@ class _Resumen extends StatelessWidget {
             if (esVendedor) ...[
               const _Facturacion(),
               const Padding(padding: EdgeInsets.symmetric(vertical: 14), child: Divider()),
+              const EntregaForm(),
+              const Padding(padding: EdgeInsets.symmetric(vertical: 14), child: Divider()),
             ],
             Row(
               children: [
@@ -300,6 +303,10 @@ class _Resumen extends StatelessWidget {
               const SizedBox(height: 16),
               InlineBanner.error(carrito.error!),
             ],
+            if (esVendedor && !carrito.entregaCompleta) ...[
+              const SizedBox(height: 16),
+              const InlineBanner.info('Completa la dirección, el departamento y el municipio de entrega para facturar.'),
+            ],
             if (!esVendedor) ...[
               const SizedBox(height: 16),
               const InlineBanner.info('Solo los usuarios con rol Vendedor pueden registrar ventas.'),
@@ -308,7 +315,7 @@ class _Resumen extends StatelessWidget {
             FilledButton.icon(
               style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48), backgroundColor: AppColors.accent),
               // Deshabilitado mientras se procesa: evita pedidos duplicados por doble clic.
-              onPressed: carrito.enviando || !esVendedor ? null : () => _confirmar(context),
+              onPressed: carrito.enviando || !esVendedor || !carrito.entregaCompleta ? null : () => _confirmar(context),
               icon: carrito.enviando
                   ? const SizedBox.square(
                       dimension: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
@@ -389,6 +396,9 @@ class _Facturacion extends StatelessWidget {
                           context: context, builder: (_) => const SeleccionarClienteDialog());
                       if (elegido != null) {
                         carrito.elegirCliente(elegido.esConsumidorFinal ? null : elegido);
+                        if (!elegido.esConsumidorFinal && elegido.direccion != null && carrito.direccionEntrega.isEmpty) {
+                          carrito.elegirDireccion(elegido.direccion!);
+                        }
                       }
                     },
               child: const Text('Cambiar'),

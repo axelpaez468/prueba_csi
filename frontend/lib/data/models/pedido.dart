@@ -1,3 +1,5 @@
+import 'pipeline.dart';
+
 /// Línea que se envía al crear un pedido: solo producto y cantidad.
 /// No existe un campo de precio a propósito; el servidor lo toma de la base de datos.
 class LineaPedido {
@@ -26,6 +28,11 @@ class Pedido {
     this.formaPago = 'EFECTIVO',
     double? baseImponible,
     double? iva,
+    this.direccionEntrega,
+    this.departamento,
+    this.municipio,
+    this.estado = 'NUEVO',
+    this.historial = const [],
   })  : baseImponible = baseImponible ?? total / 1.12,
         iva = iva ?? total - total / 1.12;
 
@@ -47,7 +54,20 @@ class Pedido {
   final double baseImponible;
   final double iva;
 
+  final String? direccionEntrega;
+  final String? departamento;
+  final String? municipio;
+
+  /// Etapa del pipeline (ver [EstadosVenta]).
+  final String estado;
+  final List<HistorialEstado> historial;
+
   String get numeroFactura => '$serie-$numero';
+
+  /// "Dirección, Municipio, Departamento" o null si la venta no tiene entrega.
+  String? get lugarEntrega => departamento == null
+      ? null
+      : [?direccionEntrega, ?municipio, departamento!].join(', ');
 
   factory Pedido.fromJson(Map<String, dynamic> json) => Pedido(
         numero: json['numero'] as int,
@@ -65,6 +85,13 @@ class Pedido {
         formaPago: (json['formaPago'] as String?) ?? 'EFECTIVO',
         baseImponible: (json['baseImponible'] as num?)?.toDouble(),
         iva: (json['iva'] as num?)?.toDouble(),
+        direccionEntrega: json['direccionEntrega'] as String?,
+        departamento: json['departamento'] as String?,
+        municipio: json['municipio'] as String?,
+        estado: (json['estado'] as String?) ?? 'NUEVO',
+        historial: ((json['historial'] as List?) ?? const [])
+            .map((h) => HistorialEstado.fromJson(h as Map<String, dynamic>))
+            .toList(),
       );
 }
 

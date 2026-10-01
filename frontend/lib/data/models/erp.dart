@@ -100,6 +100,8 @@ class VentaResumen {
     required this.formaPago,
     required this.productos,
     required this.total,
+    this.estado = 'ENTREGADO',
+    this.departamento,
   });
 
   final int numero;
@@ -111,6 +113,8 @@ class VentaResumen {
   final String formaPago;
   final int productos;
   final double total;
+  final String estado;
+  final String? departamento;
 
   factory VentaResumen.fromJson(Map<String, dynamic> j) => VentaResumen(
         numero: j['numero'] as int,
@@ -122,6 +126,8 @@ class VentaResumen {
         formaPago: j['formaPago'] as String,
         productos: j['productos'] as int,
         total: _d(j['total']),
+        estado: (j['estado'] as String?) ?? 'ENTREGADO',
+        departamento: j['departamento'] as String?,
       );
 }
 
@@ -736,6 +742,41 @@ class FilaReporte {
   final double participacion;
 }
 
+/// Ventas de un departamento, con el producto más vendido ahí (mapa).
+class VentaDepartamento {
+  const VentaDepartamento(this.departamento, this.iso, this.facturas, this.unidades, this.total, this.participacion,
+      this.productoTop, this.unidadesProductoTop);
+
+  final String departamento;
+  final String? iso;
+  final int facturas;
+  final int unidades;
+  final double total;
+  final double participacion;
+  final String? productoTop;
+  final int unidadesProductoTop;
+
+  factory VentaDepartamento.fromJson(Map<String, dynamic> j) => VentaDepartamento(
+        j['departamento'] as String,
+        j['iso'] as String?,
+        j['facturas'] as int,
+        j['unidades'] as int,
+        _d(j['total']),
+        _d(j['participacion']),
+        j['productoTop'] as String?,
+        (j['unidadesProductoTop'] as int?) ?? 0,
+      );
+}
+
+class VentaEstado {
+  const VentaEstado(this.estado, this.nombre, this.facturas, this.total);
+
+  final String estado;
+  final String nombre;
+  final int facturas;
+  final double total;
+}
+
 class ReporteVentas {
   const ReporteVentas({
     required this.resumen,
@@ -746,6 +787,8 @@ class ReporteVentas {
     required this.porVendedor,
     required this.porCliente,
     required this.porFormaPago,
+    this.porDepartamento = const [],
+    this.porEstado = const [],
   });
 
   final ResumenVentas resumen;
@@ -756,6 +799,8 @@ class ReporteVentas {
   final List<FilaReporte> porVendedor;
   final List<FilaReporte> porCliente;
   final List<FilaReporte> porFormaPago;
+  final List<VentaDepartamento> porDepartamento;
+  final List<VentaEstado> porEstado;
 
   static List<FilaReporte> _filas(Object? json, FilaReporte Function(Map<String, dynamic>) de) =>
       (json as List).map((e) => de(e as Map<String, dynamic>)).toList();
@@ -813,5 +858,12 @@ class ReporteVentas {
                   total: _d(f['total']),
                   participacion: _d(f['participacion']),
                 )),
+        porDepartamento: ((j['porDepartamento'] as List?) ?? const [])
+            .map((d) => VentaDepartamento.fromJson(d as Map<String, dynamic>))
+            .toList(),
+        porEstado: ((j['porEstado'] as List?) ?? const [])
+            .map((e) => e as Map<String, dynamic>)
+            .map((e) => VentaEstado(e['estado'] as String, e['nombre'] as String, e['facturas'] as int, _d(e['total'])))
+            .toList(),
       );
 }

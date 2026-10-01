@@ -123,7 +123,11 @@ class TablaResponsiva extends StatelessWidget {
                     for (final (j, c) in celdas(i).indexed)
                       Expanded(
                         flex: columnas[j].flex,
-                        child: Align(alignment: columnas[j].derecha ? Alignment.centerRight : Alignment.centerLeft, child: c),
+                        child: Padding(
+                          // Separación entre columnas: una alineada a la derecha no queda pegada a la siguiente.
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          child: Align(alignment: columnas[j].derecha ? Alignment.centerRight : Alignment.centerLeft, child: c),
+                        ),
                       ),
                   ]),
                 )
@@ -145,8 +149,11 @@ class TablaResponsiva extends StatelessWidget {
                   for (final c in columnas)
                     Expanded(
                       flex: c.flex,
-                      child: Text(c.titulo.toUpperCase(),
-                          style: encabezado, textAlign: c.derecha ? TextAlign.end : TextAlign.start),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        child: Text(c.titulo.toUpperCase(),
+                            style: encabezado, textAlign: c.derecha ? TextAlign.end : TextAlign.start),
+                      ),
                     ),
                 ]),
               ),

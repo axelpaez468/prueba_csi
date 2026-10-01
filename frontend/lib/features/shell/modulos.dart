@@ -16,6 +16,7 @@ import '../inventario/inventario_screen.dart';
 import '../panel/panel_screen.dart';
 import '../productos/productos_screen.dart';
 import '../usuarios/usuarios_screen.dart';
+import '../ventas/pipeline_screen.dart';
 import '../ventas/reporte_ventas_screen.dart';
 import '../ventas/ventas_screen.dart';
 
@@ -52,6 +53,8 @@ final modulos = <Modulo>[
   Modulo('Panel', 'Indicadores del negocio', Icons.space_dashboard_outlined, 'Inicio', () => const PanelScreen(), (s) => s.vePanel),
   Modulo('Catálogo', 'Productos para vender', Icons.storefront_outlined, 'Ventas', () => const CatalogScreen(), (s) => s.veCatalogo),
   Modulo('Ventas', 'Facturas emitidas', Icons.receipt_long_outlined, 'Ventas', () => const VentasScreen(), (s) => s.consultaVentas),
+  Modulo('Pipeline', 'Etapas: revisión, autorización y entrega', Icons.view_kanban_outlined, 'Ventas',
+      () => const PipelineScreen(), (s) => s.vePipeline),
   Modulo('Reportes de ventas', 'Por día, producto, vendedor y cliente', Icons.insights_outlined, 'Ventas',
       () => const ReporteVentasScreen(), (s) => s.consultaVentas),
   Modulo('Clientes', 'NIT y datos de facturación', Icons.people_alt_outlined, 'Ventas', () => const ClientesScreen(),

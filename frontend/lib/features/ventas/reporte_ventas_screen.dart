@@ -9,7 +9,9 @@ import '../../core/widgets/erp_widgets.dart';
 import '../../data/models/erp.dart';
 import '../../data/repositories/erp_repositories.dart';
 import '../auth/session_controller.dart';
+import '../../data/models/pipeline.dart';
 import '../shell/modulo_page.dart';
+import 'mapa_ventas.dart';
 
 enum _Desglose { productos, categorias, vendedores, clientes, formasPago }
 
@@ -108,6 +110,19 @@ class _ReporteVentasScreenState extends State<ReporteVentasScreen> with CargaDat
               ]),
             ),
           ),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                Text('Ventas por departamento', style: Theme.of(context).textTheme.titleMedium),
+                textoSecundario(context, 'El color indica cuánto se vendió: más oscuro, más ventas.'),
+                textoSecundario(context, 'Según el lugar de entrega. Pasa el mouse o toca un departamento para ver su detalle.'),
+                const SizedBox(height: 16),
+                MapaVentas(datos: r.porDepartamento),
+              ]),
+            ),
+          ),
+          if (r.porEstado.isNotEmpty) _PorEtapa(estados: r.porEstado),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: SegmentedButton<_Desglose>(
@@ -280,6 +295,58 @@ class _TablaDesglose extends StatelessWidget {
         ]);
       },
       pie: FilaValor('Total', formatearMoneda(total), destacado: true),
+    );
+  }
+}
+
+/// Cuántas ventas del período hay en cada etapa del pipeline.
+class _PorEtapa extends StatelessWidget {
+  const _PorEtapa({required this.estados});
+
+  final List<VentaEstado> estados;
+
+  @override
+  Widget build(BuildContext context) {
+    final total = estados.fold<int>(0, (s, e) => s + e.facturas);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Text('Ventas por etapa del pipeline', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 14),
+          // Barra apilada: proporción de ventas en cada etapa.
+          ClipRRect(
+            borderRadius: BorderRadius.circular(99),
+            child: SizedBox(
+              height: 14,
+              child: Row(children: [
+                for (final e in estados)
+                  if (e.facturas > 0)
+                    Expanded(flex: e.facturas, child: ColoredBox(color: EstadosVenta.color(e.estado), child: const SizedBox.expand())),
+                if (total == 0) const Expanded(child: ColoredBox(color: AppColors.border, child: SizedBox.expand())),
+              ]),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Wrap(spacing: 20, runSpacing: 10, children: [
+            for (final e in estados)
+              Row(mainAxisSize: MainAxisSize.min, children: [
+                Container(width: 10, height: 10, decoration: BoxDecoration(color: EstadosVenta.color(e.estado), shape: BoxShape.circle)),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text.rich(
+                    TextSpan(children: [
+                      TextSpan(text: '${e.nombre}: '),
+                      TextSpan(text: '${e.facturas}', style: const TextStyle(fontWeight: FontWeight.w700)),
+                      TextSpan(text: ' · ${formatearMoneda(e.total)}', style: const TextStyle(color: AppColors.textSecondary)),
+                    ]),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+              ]),
+          ]),
+        ]),
+      ),
     );
   }
 }

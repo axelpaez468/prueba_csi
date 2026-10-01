@@ -10,11 +10,15 @@ class PedidoRepository {
 
   /// Envía solo productos, cantidades, cliente y forma de pago. La venta devuelta trae el total calculado
   /// por el servidor. Sin cliente, el servidor factura a consumidor final (CF).
-  Future<Pedido> crear(List<LineaPedido> lineas, {int? clienteId, String? formaPago}) async {
+  Future<Pedido> crear(List<LineaPedido> lineas,
+      {int? clienteId, String? formaPago, String? direccionEntrega, String? departamento, String? municipio}) async {
     final json = await _api.post('/api/pedidos', {
       'lineas': lineas.map((l) => l.toJson()).toList(),
       'clienteId': ?clienteId,
       'formaPago': ?formaPago,
+      'direccionEntrega': ?direccionEntrega,
+      'departamento': ?departamento,
+      'municipio': ?municipio,
     });
     return Pedido.fromJson(json as Map<String, dynamic>);
   }

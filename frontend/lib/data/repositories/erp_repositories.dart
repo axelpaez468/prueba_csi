@@ -1,6 +1,8 @@
 import '../../core/network/api_client.dart';
 import '../../core/util/formatters.dart';
 import '../models/erp.dart';
+import '../models/pedido.dart';
+import '../models/pipeline.dart';
 
 String _q(String? texto) =>
     (texto == null || texto.trim().isEmpty) ? '' : Uri.encodeQueryComponent(texto.trim());
@@ -134,4 +136,29 @@ class ReporteRepository {
 
   Future<ReporteVentas> ventas(DateTime desde, DateTime hasta) async => ReporteVentas.fromJson(
       await _api.get('/api/reportes/ventas?desde=${fechaIso(desde)}&hasta=${fechaIso(hasta)}') as Map<String, dynamic>);
+}
+
+/// Departamentos y municipios de Guatemala. Se descargan una vez por sesión de la app.
+class GeografiaRepository {
+  GeografiaRepository(this._api);
+
+  final ApiClient _api;
+  List<Departamento>? _cache;
+
+  Future<List<Departamento>> departamentos() async =>
+      _cache ??= _lista(await _api.get('/api/geografia'), Departamento.fromJson);
+}
+
+class PipelineRepository {
+  PipelineRepository(this._api);
+
+  final ApiClient _api;
+
+  Future<List<TarjetaPipeline>> tablero() async => _lista(await _api.get('/api/pipeline'), TarjetaPipeline.fromJson);
+
+  /// Venta con su historial de etapas (también para bodega).
+  Future<Pedido> venta(int numero) async => Pedido.fromJson(await _api.get('/api/pipeline/$numero') as Map<String, dynamic>);
+
+  Future<String> avanzar(int numero, {String? nota}) async =>
+      ((await _api.post('/api/pipeline/$numero/avanzar', {'nota': ?nota})) as Map<String, dynamic>)['mensaje'] as String;
 }

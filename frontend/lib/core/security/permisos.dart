@@ -50,4 +50,15 @@ extension PermisosSesion on Session {
   bool get vePanel => _es([Roles.admin, Roles.bodega, Roles.compras, Roles.contador]);
 
   String get nombreRol => Roles.nombre(rol);
+
+  /// Tablero de etapas de las ventas.
+  bool get vePipeline => _es([Roles.vendedor, Roles.admin, Roles.contador, Roles.bodega]);
+
+  /// Si el rol puede llevar una venta A esta etapa (espejo de EstadosVenta.QuienPuedeLlevarA del backend).
+  bool puedeLlevarA(String etapa) => switch (etapa) {
+        'REVISADO' => _es([Roles.vendedor, Roles.admin]),
+        'AUTORIZADO' => _es([Roles.admin, Roles.contador]),
+        'DESPACHADO' || 'EN_CAMINO' || 'ENTREGADO' => _es([Roles.bodega, Roles.admin]),
+        _ => false,
+      };
 }

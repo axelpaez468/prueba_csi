@@ -33,6 +33,11 @@ class CartController extends ChangeNotifier {
   Cliente? _cliente;
   String _formaPago = 'EFECTIVO';
 
+  // Entrega de la venta.
+  String _direccion = '';
+  String? _departamento;
+  String? _municipio;
+
   List<CartItem> get items => List.unmodifiable(_items.values);
   bool get vacio => _items.isEmpty;
   bool get enviando => _enviando;
@@ -48,6 +53,38 @@ class CartController extends ChangeNotifier {
   void elegirFormaPago(String forma) {
     _formaPago = forma;
     notifyListeners();
+  }
+
+  String get direccionEntrega => _direccion;
+  String? get departamento => _departamento;
+  String? get municipio => _municipio;
+
+  /// Para facturar hacen falta la dirección, el departamento y el municipio.
+  bool get entregaCompleta => _direccion.trim().length >= 5 && _departamento != null && _municipio != null;
+
+  void elegirDireccion(String direccion) {
+    _direccion = direccion;
+    notifyListeners();
+  }
+
+  void elegirDepartamento(String? departamento) {
+    if (departamento == _departamento) return;
+    _departamento = departamento;
+    _municipio = null; // el municipio anterior ya no corresponde al nuevo departamento
+    notifyListeners();
+  }
+
+  void elegirMunicipio(String? municipio) {
+    _municipio = municipio;
+    notifyListeners();
+  }
+
+  void _limpiarVenta() {
+    _cliente = null;
+    _formaPago = 'EFECTIVO';
+    _direccion = '';
+    _departamento = null;
+    _municipio = null;
   }
 
   int get totalUnidades => _items.values.fold(0, (s, i) => s + i.cantidad);
@@ -87,8 +124,7 @@ class CartController extends ChangeNotifier {
   void vaciar() {
     _items.clear();
     _error = null;
-    _cliente = null;
-    _formaPago = 'EFECTIVO';
+    _limpiarVenta();
     notifyListeners();
   }
 
@@ -105,10 +141,12 @@ class CartController extends ChangeNotifier {
         _items.values.map((i) => LineaPedido(productoId: i.producto.id, cantidad: i.cantidad)).toList(),
         clienteId: _cliente?.id,
         formaPago: _formaPago,
+        direccionEntrega: _direccion.trim().isEmpty ? null : _direccion.trim(),
+        departamento: _departamento,
+        municipio: _municipio,
       );
       _items.clear();
-      _cliente = null;
-      _formaPago = 'EFECTIVO';
+      _limpiarVenta();
       return pedido;
     } on UnauthorizedException {
       return null; // La sesión se cierra y la app vuelve al login.

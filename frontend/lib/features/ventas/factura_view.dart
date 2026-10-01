@@ -59,6 +59,7 @@ class FacturaView extends StatelessWidget {
               if (pedido.clienteDireccion != null) dato('Dirección', pedido.clienteDireccion!),
               dato('Forma de pago', '${formaPagoLegible(pedido.formaPago)} (contado)'),
               if (pedido.vendedor != null) dato('Vendedor', pedido.vendedor!),
+              if (pedido.lugarEntrega != null) dato('Entrega', pedido.lugarEntrega!),
             ],
           ),
         ),

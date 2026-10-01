@@ -26,6 +26,8 @@ import 'package:pedidos_app/features/catalog/catalog_controller.dart';
 import 'package:pedidos_app/features/catalog/catalog_screen.dart';
 import 'package:pedidos_app/features/catalog/producto_detalle_screen.dart';
 import 'package:pedidos_app/features/ventas/reporte_ventas_screen.dart';
+import 'package:pedidos_app/features/ventas/pipeline_screen.dart';
+import 'package:pedidos_app/features/ventas/mapa_ventas.dart';
 import 'package:pedidos_app/features/clientes/clientes_screen.dart';
 import 'package:pedidos_app/features/clientes/tercero_form_dialog.dart';
 import 'package:pedidos_app/features/compras/ordenes_screen.dart';
@@ -144,7 +146,31 @@ Object? _respuestaErp(String ruta) => switch (ruta) {
             {'nombre': 'Conexión', 'valor': 'USB-C desmontable'},
           ],
         },
+      '/api/geografia' => [
+          {'nombre': 'Guatemala', 'iso': 'GT-GU', 'municipios': ['Guatemala', 'Mixco', 'Villa Nueva']},
+          {'nombre': 'Quetzaltenango', 'iso': 'GT-QZ', 'municipios': ['Quetzaltenango', 'Coatepeque']},
+        ],
+      '/api/pipeline' => [
+          for (final (i, e) in ['NUEVO', 'REVISADO', 'AUTORIZADO', 'DESPACHADO', 'EN_CAMINO', 'ENTREGADO', 'NUEVO'].indexed)
+            {
+              'numero': 2000 + i, 'fecha': '2026-09-25T15:30:00Z', 'clienteNombre': _nombreLargo, 'vendedor': 'María Fernanda Hernández',
+              'total': 12345.67, 'productos': 3, 'departamento': 'Quetzaltenango', 'municipio': 'San Juan Ostuncalco', 'estado': e,
+              'estadoDesde': '2026-09-25T15:30:00Z', 'puedeAvanzarA': i == 2 ? 'DESPACHADO' : (i == 0 ? 'REVISADO' : null),
+            },
+        ],
       '/api/reportes/ventas' => {
+          'porDepartamento': [
+            {'departamento': 'Guatemala', 'iso': 'GT-GU', 'facturas': 300, 'unidades': 900, 'total': 950000.5, 'participacion': 50.4,
+              'productoTop': 'Combo teclado y mouse con nombre largo', 'unidadesProductoTop': 120},
+            {'departamento': 'Petén', 'iso': 'GT-PE', 'facturas': 20, 'unidades': 40, 'total': 50000, 'participacion': 2.6,
+              'productoTop': 'Memoria USB 128 GB', 'unidadesProductoTop': 15},
+            {'departamento': 'Sin departamento', 'iso': null, 'facturas': 5, 'unidades': 6, 'total': 1200, 'participacion': 0.1,
+              'productoTop': null, 'unidadesProductoTop': 0},
+          ],
+          'porEstado': [
+            for (final (i, e) in ['NUEVO', 'REVISADO', 'AUTORIZADO', 'DESPACHADO', 'EN_CAMINO', 'ENTREGADO'].indexed)
+              {'estado': e, 'nombre': e, 'facturas': i * 10 + 1, 'total': i * 1000.0},
+          ],
           'desde': '2026-09-01', 'hasta': '2026-09-30',
           'resumen': _resumenVentas(1234567.89),
           'periodoAnterior': _resumenVentas(1000000),
@@ -182,7 +208,13 @@ Object? _respuestaErp(String ruta) => switch (ruta) {
             {'numero': 1000 + i, 'serie': 'A', 'fecha': '2026-09-30T15:30:00Z', 'clienteNit': '1234567-9', 'clienteNombre': _nombreLargo,
               'vendedor': 'María Fernanda Hernández de la Cruz', 'formaPago': 'TRANSFERENCIA', 'productos': 3, 'total': 1234567.89},
         ],
-      '/api/pedidos/1234' => {
+      '/api/pedidos/1234' || '/api/pipeline/1234' => {
+          'direccionEntrega': '6a. avenida 10-20, zona 1', 'departamento': 'Quetzaltenango', 'municipio': 'Coatepeque',
+          'estado': 'DESPACHADO',
+          'historial': [
+            for (final (e, u) in [('NUEVO', 'Vendedor Demo'), ('REVISADO', 'Vendedor Demo'), ('AUTORIZADO', 'Contador Demo'), ('DESPACHADO', 'Bodega Demo')])
+              {'estado': e, 'fecha': '2026-09-29T15:30:00Z', 'usuario': u, 'nota': e == 'DESPACHADO' ? 'Guía 4521 de transporte' : null},
+          ],
           'numero': 1234, 'fecha': '2026-09-29T15:30:00Z', 'usuarioId': 1, 'total': 3375.5, 'serie': 'A',
           'autorizacion': '3f2504e0-4f89-11d3-9a0c-0305e82c3301', 'clienteId': 2, 'clienteNit': '1234567-9', 'clienteNombre': _nombreLargo,
           'clienteDireccion': '6a. avenida 10-20, zona 1', 'vendedor': 'Vendedor Demo', 'formaPago': 'EFECTIVO',
@@ -342,6 +374,8 @@ Future<void> _montar(WidgetTester tester, Size tamano, Widget pantalla,
       Provider.value(value: PanelRepository(api)),
       Provider.value(value: ReporteRepository(api)),
       Provider.value(value: ProductoRepository(api)),
+      Provider.value(value: GeografiaRepository(api)),
+      Provider.value(value: PipelineRepository(api)),
       ChangeNotifierProvider.value(value: session),
       ChangeNotifierProvider(create: (_) => NavegacionController()),
       ChangeNotifierProvider.value(value: catalogo),
@@ -463,7 +497,7 @@ void main() {
           expect(find.byTooltip('Contabilidad'), findsOneWidget);
           await tester.tap(find.byTooltip('Ventas'));
           await tester.pumpAndSettle();
-          expect(find.byType(PopupMenuItem<Modulo>), findsNWidgets(4));
+          expect(find.byType(PopupMenuItem<Modulo>), findsNWidgets(5));
         } else {
           // Tablet y celular: botón de menú con un panel lateral agrupado por área.
           await tester.tap(find.byTooltip('Menú'));
@@ -484,6 +518,24 @@ void main() {
         } else {
           expect(find.byTooltip('Menú'), findsOneWidget);
         }
+      });
+
+      testWidgets('pipeline de ventas', (tester) async {
+        await _montar(tester, tamano, const PipelineScreen());
+        expect(find.text('Pipeline de ventas'), findsOneWidget);
+        if (tamano.width >= 900) {
+          expect(find.text('Despachar'), findsOneWidget);   // la tarjeta en "Autorizado" que le toca al usuario
+          expect(find.text('En camino'), findsWidgets);     // encabezado de columna
+        } else {
+          expect(find.text('Marcar revisado'), findsOneWidget); // en celular se ve la etapa "Nuevo"
+        }
+      });
+
+      testWidgets('carrito con datos de entrega', (tester) async {
+        await _montar(tester, tamano, const CartScreen(), rol: 'VENDEDOR');
+        expect(find.byKey(const Key('campo-departamento')), findsOneWidget);
+        expect(find.text('Primero elige el departamento'), findsOneWidget);
+        expect(find.textContaining('Completa la dirección'), findsOneWidget);
       });
 
       testWidgets('panel de inicio', (tester) async {
@@ -512,6 +564,9 @@ void main() {
         await _montar(tester, tamano, const VentaDetalleScreen(numero: 1234));
         expect(find.byKey(const Key('total-pedido')), findsOneWidget);
         expect(find.text('IVA 12 %'), findsOneWidget);
+        expect(find.text('Etapas de la venta'), findsOneWidget);
+        expect(find.textContaining('Guía 4521'), findsOneWidget);
+        expect(find.text('Enviar (en camino)'), findsOneWidget); // ADMIN puede dar el siguiente paso
       });
 
       testWidgets('inventario', (tester) async {
@@ -612,8 +667,14 @@ void main() {
       });
 
       testWidgets('reporte de ventas', (tester) async {
+        await tester.runAsync(precargarMapa); // el mapa se lee de un asset (E/S real)
         await _montar(tester, tamano, const ReporteVentasScreen());
         expect(find.text('Ticket promedio'), findsOneWidget);
+        await tester.scrollUntilVisible(find.byKey(const Key('mapa-guatemala')), 300,
+            scrollable: find.byType(Scrollable).first);
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('mapa-guatemala')), findsOneWidget);
+        expect(find.textContaining('Combo teclado y mouse'), findsOneWidget); // producto top del departamento líder
         expect(find.textContaining('vs. período anterior'), findsWidgets);
         for (final pestana in ['Vendedores', 'Clientes', 'Formas de pago']) {
           await tester.ensureVisible(find.text(pestana));
