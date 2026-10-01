@@ -368,6 +368,21 @@ BEGIN
 END
 GO
 
+-- Probabilidad de cierre de cada etapa, para el pronóstico de ventas (la cambia el administrador).
+IF OBJECT_ID(N'dbo.EtapasPipeline', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.EtapasPipeline (
+        Estado         NVARCHAR(12)  NOT NULL CONSTRAINT PK_EtapasPipeline PRIMARY KEY,
+        Probabilidad   DECIMAL(5,2)  NOT NULL,
+        ActualizadoEn  DATETIME2     NULL,
+        ActualizadoPor NVARCHAR(100) NULL,
+        CONSTRAINT CK_EtapasPipeline_Probabilidad CHECK (Probabilidad >= 0 AND Probabilidad <= 100)
+    );
+    INSERT INTO dbo.EtapasPipeline (Estado, Probabilidad) VALUES
+        (N'NUEVO', 10), (N'REVISADO', 25), (N'AUTORIZADO', 50), (N'DESPACHADO', 75), (N'EN_CAMINO', 90), (N'ENTREGADO', 100);
+END
+GO
+
 -- Pedidos anteriores al ERP: a consumidor final, con el IVA separado del total.
 UPDATE dbo.Pedidos SET ClienteId = (SELECT Id FROM dbo.Clientes WHERE Nit = N'CF') WHERE ClienteId IS NULL;
 UPDATE dbo.Pedidos SET BaseImponible = ROUND(Total / 1.12, 2), Iva = Total - ROUND(Total / 1.12, 2)

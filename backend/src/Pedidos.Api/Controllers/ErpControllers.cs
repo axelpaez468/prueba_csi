@@ -318,19 +318,39 @@ public class PipelineController : ControllerBase
 public class ReportesController : ControllerBase
 {
     private readonly ReporteVentasService _reportes;
+    private readonly PronosticoService _pronostico;
     private readonly TimeProvider _time;
 
-    public ReportesController(ReporteVentasService reportes, TimeProvider time)
+    public ReportesController(ReporteVentasService reportes, PronosticoService pronostico, TimeProvider time)
     {
         _reportes = reportes;
+        _pronostico = pronostico;
         _time = time;
     }
+
+    private bool VeTodas => User.IsInRole(Roles.Admin) || User.IsInRole(Roles.Contador);
 
     [HttpGet("ventas")]
     public Task<ReporteVentasResponse> Ventas([FromQuery] DateOnly? desde, [FromQuery] DateOnly? hasta, CancellationToken ct)
     {
         var (d, h) = RangoPorDefecto.Resolver(desde, hasta, _time);
-        var veTodas = User.IsInRole(Roles.Admin) || User.IsInRole(Roles.Contador);
-        return _reportes.GenerarAsync(d, h, User.GetUsuarioId(), veTodas, ct);
+        return _reportes.GenerarAsync(d, h, User.GetUsuarioId(), VeTodas, ct);
+    }
+
+    /// <summary>Pronóstico según el pipeline: cerrado + total de cada etapa abierta por su probabilidad de cierre.</summary>
+    [HttpGet("pronostico")]
+    public Task<PronosticoResponse> Pronostico([FromQuery] DateOnly? desde, [FromQuery] DateOnly? hasta, CancellationToken ct)
+    {
+        var (d, h) = RangoPorDefecto.Resolver(desde, hasta, _time);
+        return _pronostico.GenerarAsync(d, h, User.GetUsuarioId(), VeTodas, ct);
+    }
+
+    /// <summary>Cambia la probabilidad de cierre de las etapas (solo administración).</summary>
+    [HttpPut("pronostico/probabilidades")]
+    [Authorize(Roles = Roles.Admin)]
+    public async Task<MensajeResponse> Probabilidades(ActualizarProbabilidadesRequest request, CancellationToken ct)
+    {
+        await _pronostico.ActualizarProbabilidadesAsync(request, User.GetUsuarioId(), ct);
+        return new MensajeResponse("Se guardaron las probabilidades de cierre.");
     }
 }

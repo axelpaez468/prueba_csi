@@ -30,6 +30,15 @@ public static class EstadosVenta
         _ => Array.Empty<string>()
     };
 
+    /// <summary>
+    /// Probabilidad de cierre con la que arranca cada etapa (el administrador la puede cambiar). Una venta entregada
+    /// y cobrada ya está cerrada: siempre 100 %.
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, decimal> ProbabilidadInicial = new Dictionary<string, decimal>
+    {
+        [Nuevo] = 10, [Revisado] = 25, [Autorizado] = 50, [Despachado] = 75, [EnCamino] = 90, [Entregado] = 100
+    };
+
     public static string Nombre(string estado) => estado switch
     {
         Nuevo => "Nuevo",
@@ -40,6 +49,15 @@ public static class EstadosVenta
         Entregado => "Entregado / cobrado",
         _ => estado
     };
+}
+
+/// <summary>Probabilidad de cierre de una etapa del pipeline (0 a 100 %), para el pronóstico de ventas.</summary>
+public class EtapaPipeline
+{
+    public string Estado { get; set; } = EstadosVenta.Nuevo;
+    public decimal Probabilidad { get; set; }
+    public DateTime? ActualizadoEn { get; set; }
+    public string? ActualizadoPor { get; set; }
 }
 
 /// <summary>Cada cambio de etapa de una venta: quién, cuándo y con qué nota (trazabilidad del pipeline).</summary>

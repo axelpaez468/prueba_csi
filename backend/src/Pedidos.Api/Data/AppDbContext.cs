@@ -16,6 +16,7 @@ public class AppDbContext : DbContext
     public DbSet<Pedido> Pedidos => Set<Pedido>();
     public DbSet<PedidoDetalle> PedidoDetalles => Set<PedidoDetalle>();
     public DbSet<PedidoHistorial> PedidoHistorial => Set<PedidoHistorial>();
+    public DbSet<EtapaPipeline> EtapasPipeline => Set<EtapaPipeline>();
     public DbSet<CodigoRespaldo> CodigosRespaldo => Set<CodigoRespaldo>();
     public DbSet<TokenRecuperacion> TokensRecuperacion => Set<TokenRecuperacion>();
     public DbSet<DispositivoConfiable> DispositivosConfiables => Set<DispositivoConfiable>();
@@ -184,6 +185,20 @@ public class AppDbContext : DbContext
             e.HasOne<Pedido>().WithMany().HasForeignKey(h => h.PedidoId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne<Usuario>().WithMany().HasForeignKey(h => h.UsuarioId).OnDelete(DeleteBehavior.Restrict);
             e.HasIndex(h => new { h.PedidoId, h.Id });
+        });
+
+        model.Entity<EtapaPipeline>(e =>
+        {
+            e.ToTable("EtapasPipeline", t => t.HasCheckConstraint("CK_EtapasPipeline_Probabilidad",
+                "CAST([Probabilidad] AS REAL) >= 0 AND CAST([Probabilidad] AS REAL) <= 100"));
+            e.HasKey(x => x.Estado);
+            e.Property(x => x.Estado).HasMaxLength(12);
+            e.Property(x => x.Probabilidad).HasPrecision(5, 2);
+            e.Property(x => x.ActualizadoPor).HasMaxLength(100);
+            e.Property(x => x.ActualizadoEn).HasConversion(
+                v => v, v => v == null ? null : DateTime.SpecifyKind(v.Value, DateTimeKind.Utc));
+            // Mismos valores que siembra db/init/init.sql.
+            e.HasData(EstadosVenta.Orden.Select(s => new EtapaPipeline { Estado = s, Probabilidad = EstadosVenta.ProbabilidadInicial[s] }));
         });
 
         model.Entity<ProductoImagen>(e =>

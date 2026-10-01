@@ -66,6 +66,7 @@ builder.Services.AddScoped<Pedidos.Api.Services.Erp.InventarioService>();
 builder.Services.AddScoped<Pedidos.Api.Services.Erp.CompraService>();
 builder.Services.AddScoped<Pedidos.Api.Services.Erp.PanelService>();
 builder.Services.AddScoped<Pedidos.Api.Services.Erp.ReporteVentasService>();
+builder.Services.AddScoped<Pedidos.Api.Services.Erp.PronosticoService>();
 builder.Services.AddScoped<Pedidos.Api.Services.Erp.ImagenesService>();
 builder.Services.AddScoped<Pedidos.Api.Services.Erp.PipelineService>();
 builder.Services.AddHostedService<Pedidos.Api.Services.Erp.GeneradorDemoHostedService>();

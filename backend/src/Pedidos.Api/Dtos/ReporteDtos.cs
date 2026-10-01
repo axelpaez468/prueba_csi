@@ -48,3 +48,42 @@ public record ReporteVentasResponse(
     List<VentaPorFormaPagoResponse> PorFormaPago,
     List<VentaPorDepartamentoResponse> PorDepartamento,
     List<VentaPorEstadoResponse> PorEstado);
+
+/// <summary>Una etapa del pipeline en el pronóstico: ventas en la etapa y su valor ponderado (total × probabilidad).</summary>
+public record EtapaPronosticoResponse(string Estado, string Nombre, decimal Probabilidad, int Facturas, decimal Total, decimal Ponderado);
+
+/// <summary>Un tramo de la tendencia (día, semana o mes, según el largo del rango).</summary>
+public record PronosticoPeriodoResponse(DateOnly Desde, DateOnly Hasta, decimal Cerrado, decimal Abierto, decimal Ponderado);
+
+public record PronosticoVendedorResponse(
+    int UsuarioId, string Vendedor, int Facturas, decimal Cerrado, decimal Abierto, decimal Ponderado, decimal Pronostico);
+
+/// <summary>
+/// Pronóstico (forecast) de las ventas del rango: lo cerrado (entregado y cobrado) más lo que se espera cerrar de las
+/// ventas abiertas, que es el total de cada etapa por su probabilidad de cierre.
+/// </summary>
+public record PronosticoResponse(
+    DateOnly Desde,
+    DateOnly Hasta,
+    // DIA, SEMANA o MES: cómo se agrupa la tendencia.
+    string Agrupacion,
+    int FacturasCerradas,
+    decimal Cerrado,
+    int FacturasAbiertas,
+    decimal Abierto,
+    decimal PonderadoAbierto,
+    // Cerrado + ponderado de las abiertas.
+    decimal Pronostico,
+    // Probabilidad media de las abiertas (ponderado / abierto, %).
+    decimal ProbabilidadAbiertas,
+    // Qué parte del pronóstico ya está cerrada (%).
+    decimal AvanceCierre,
+    List<EtapaPronosticoResponse> Etapas,
+    List<PronosticoPeriodoResponse> Tendencia,
+    List<PronosticoVendedorResponse> PorVendedor,
+    DateTime? ProbabilidadesActualizadasEn,
+    string? ProbabilidadesActualizadasPor);
+
+public record ProbabilidadEtapaRequest(string Estado, decimal Probabilidad);
+
+public record ActualizarProbabilidadesRequest(List<ProbabilidadEtapaRequest> Etapas);
