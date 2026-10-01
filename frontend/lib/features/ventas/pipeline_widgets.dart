@@ -112,31 +112,51 @@ class _Paso extends StatelessWidget {
 }
 
 /// Pide una nota opcional y confirma el paso a la siguiente etapa. Devuelve la nota, '' sin nota, o null si se canceló.
-Future<String?> pedirNotaAvance(BuildContext context, int numero, String destino) async {
-  final nota = TextEditingController();
-  final r = await showDialog<String>(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      title: Text('${EstadosVenta.accion(destino)} · A-$numero'),
+Future<String?> pedirNotaAvance(BuildContext context, int numero, String destino) =>
+    showDialog<String>(context: context, builder: (_) => _DialogoNota(numero: numero, destino: destino));
+
+/// El controlador vive en el estado del diálogo para liberarlo cuando termina la animación de cierre.
+class _DialogoNota extends StatefulWidget {
+  const _DialogoNota({required this.numero, required this.destino});
+
+  final int numero;
+  final String destino;
+
+  @override
+  State<_DialogoNota> createState() => _DialogoNotaState();
+}
+
+class _DialogoNotaState extends State<_DialogoNota> {
+  final _nota = TextEditingController();
+
+  @override
+  void dispose() {
+    _nota.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text('${EstadosVenta.accion(widget.destino)} · A-${widget.numero}'),
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 420),
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Text('La venta pasará a "${EstadosVenta.nombre(destino)}".'),
+          Text('La venta pasará a "${EstadosVenta.nombre(widget.destino)}".'),
           const SizedBox(height: 12),
           TextField(
-            controller: nota,
+            controller: _nota,
             autofocus: true,
             maxLength: 200,
             decoration: const InputDecoration(labelText: 'Nota (opcional)', hintText: 'Guía 4521, entregado a recepción...'),
+            onSubmitted: (v) => Navigator.of(context).pop(v.trim()),
           ),
         ]),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancelar')),
-        FilledButton(onPressed: () => Navigator.of(ctx).pop(nota.text.trim()), child: Text(EstadosVenta.accion(destino))),
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancelar')),
+        FilledButton(onPressed: () => Navigator.of(context).pop(_nota.text.trim()), child: Text(EstadosVenta.accion(widget.destino))),
       ],
-    ),
-  );
-  nota.dispose();
-  return r;
+    );
+  }
 }

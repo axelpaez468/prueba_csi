@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:flutter/gestures.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -323,6 +325,7 @@ http.Response _responder(http.Request req) {
             'creadoEn': '2026-09-29T15:30:00Z',
           },
       ],
+    '/api/pipeline/2002/avanzar' => {'mensaje': 'La venta A-2002 pasó a Despachado.'},
     '/api/auth/login' => {'requiereSegundoFactor': true, 'desafio': 'd', 'metodo': _metodoLogin, 'secreto': 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP', 'uri': 'otpauth://totp/Sistema%20de%20Pedidos:admin@pedidos.local?secret=JBSWY3DPEHPK3PXP&issuer=Sistema%20de%20Pedidos'},
     final ruta => _respuestaErp(ruta) ?? <String, dynamic>{},
   };
@@ -698,4 +701,37 @@ void main() {
       });
     });
   }
+
+  testWidgets('pipeline: arrastrar una tarjeta a la siguiente etapa la avanza', (tester) async {
+    await _montar(tester, const Size(1920, 1080), const PipelineScreen());
+
+    Future<void> arrastrar(String tarjeta, String columna) async {
+      final origen = tester.getCenter(find.text(tarjeta));
+      final destino = Offset(tester.getCenter(find.text(columna).first).dx, origen.dy + 200);
+      final gesto = await tester.startGesture(origen, kind: PointerDeviceKind.mouse);
+      await gesto.moveBy(const Offset(20, 0));
+      await tester.pump();
+      expect(find.text(tarjeta), findsNWidgets(2)); // la tarjeta flotante y la original (atenuada)
+      await gesto.moveTo(destino);
+      await tester.pump();
+      if (columna == 'Despachado') {
+        expect(find.byKey(const Key('zona-soltar')), findsOneWidget); // se resalta la columna válida
+      } else {
+        expect(find.textContaining('Solo puede pasar a "Despachado"'), findsOneWidget);
+      }
+      await gesto.up();
+      await tester.pumpAndSettle();
+    }
+
+    // A una etapa que no es la siguiente: se rechaza y no se pide confirmación.
+    await arrastrar('A-2002', 'En camino');
+    expect(find.byType(AlertDialog), findsNothing);
+
+    // A la siguiente etapa: pide la nota y avanza.
+    await arrastrar('A-2002', 'Despachado');
+    expect(find.text('Despachar · A-2002'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Despachar').last);
+    await tester.pumpAndSettle();
+    expect(find.text('La venta A-2002 pasó a Despachado.'), findsOneWidget);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows)); // con mouse el arrastre empieza de inmediato
 }
