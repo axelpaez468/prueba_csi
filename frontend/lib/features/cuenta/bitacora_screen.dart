@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/network/api_exception.dart';
 import '../../core/widgets/app_shell.dart';
+import '../../core/widgets/erp_widgets.dart';
 import '../../data/models/seguridad.dart';
 import '../../data/repositories/cuenta_repository.dart';
 import '../shell/app_top_bar.dart';
@@ -17,6 +18,7 @@ class BitacoraScreen extends StatefulWidget {
 }
 
 class _BitacoraScreenState extends State<BitacoraScreen> {
+  final _paginacion = Paginacion();
   final _filtro = TextEditingController();
   List<RegistroAcceso> _registros = const [];
   bool _cargando = true;
@@ -111,7 +113,20 @@ class _BitacoraScreenState extends State<BitacoraScreen> {
                             if (_error != null) Padding(padding: const EdgeInsets.all(12), child: InlineBanner.error(_error!)),
                             if (!_cargando && visibles.isEmpty && _error == null)
                               const Padding(padding: EdgeInsets.all(24), child: Center(child: Text('Sin eventos.'))),
-                            for (final r in visibles) FilaAcceso(acceso: r, mostrarEmail: true),
+                            for (final r in _paginacion.recortar(visibles)) FilaAcceso(acceso: r, mostrarEmail: true),
+                            if (Paginacion.necesaria(visibles.length)) ...[
+                              const Divider(),
+                              Paginador(
+                                total: visibles.length,
+                                pagina: _paginacion.pagina,
+                                porPagina: _paginacion.porPagina,
+                                alCambiarPagina: (p) => setState(() => _paginacion.pagina = p),
+                                alCambiarPorPagina: (n) => setState(() {
+                                  _paginacion.porPagina = n;
+                                  _paginacion.pagina = 0;
+                                }),
+                              ),
+                            ],
                           ],
                         ),
                       ),

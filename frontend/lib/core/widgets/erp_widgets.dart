@@ -76,8 +76,96 @@ class ColumnaTabla {
   final bool derecha;
 }
 
+/// Paginación de una lista: rango mostrado, filas por página y navegación entre páginas.
+class Paginador extends StatelessWidget {
+  const Paginador({
+    super.key,
+    required this.total,
+    required this.pagina,
+    required this.porPagina,
+    required this.alCambiarPagina,
+    required this.alCambiarPorPagina,
+    this.opciones = Paginacion.opciones,
+  });
+
+  final int total;
+
+  /// Desde 0.
+  final int pagina;
+  final int porPagina;
+  final ValueChanged<int> alCambiarPagina;
+  final ValueChanged<int> alCambiarPorPagina;
+  final List<int> opciones;
+
+  int get paginas => total == 0 ? 1 : (total / porPagina).ceil();
+
+  @override
+  Widget build(BuildContext context) {
+    final desde = total == 0 ? 0 : pagina * porPagina + 1;
+    final hasta = ((pagina + 1) * porPagina).clamp(0, total);
+    final primera = pagina == 0;
+    final ultima = pagina >= paginas - 1;
+    final estilo = Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary);
+
+    Widget boton(IconData icono, String ayuda, bool habilitado, int destino) => IconButton(
+          tooltip: ayuda,
+          visualDensity: VisualDensity.compact,
+          onPressed: habilitado ? () => alCambiarPagina(destino) : null,
+          icon: Icon(icono, size: 20),
+        );
+
+    return Wrap(
+      alignment: WrapAlignment.spaceBetween,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: 16,
+      runSpacing: 4,
+      children: [
+        Text('Mostrando ${formatearNumero(desde)}–${formatearNumero(hasta)} de ${formatearNumero(total)}',
+            key: const Key('paginador-rango'), style: estilo),
+        Wrap(crossAxisAlignment: WrapCrossAlignment.center, spacing: 4, children: [
+          Text('Filas', style: estilo),
+          DropdownButton<int>(
+            value: porPagina,
+            isDense: true,
+            underline: const SizedBox.shrink(),
+            items: [for (final o in opciones) DropdownMenuItem(value: o, child: Text('$o'))],
+            onChanged: (v) => alCambiarPorPagina(v ?? porPagina),
+          ),
+          const SizedBox(width: 8),
+          boton(Icons.first_page, 'Primera página', !primera, 0),
+          boton(Icons.chevron_left, 'Página anterior', !primera, pagina - 1),
+          Text('${pagina + 1} / $paginas', style: Theme.of(context).textTheme.labelLarge),
+          boton(Icons.chevron_right, 'Página siguiente', !ultima, pagina + 1),
+          boton(Icons.last_page, 'Última página', !ultima, paginas - 1),
+        ]),
+      ],
+    );
+  }
+}
+
+/// Estado de paginación para listas propias (las tablas lo traen incluido).
+class Paginacion {
+  Paginacion({this.porPagina = 25});
+
+  static const opciones = [10, 25, 50, 100];
+
+  int pagina = 0;
+  int porPagina;
+
+  /// Ajusta la página si la lista se achicó (por un filtro o una búsqueda).
+  List<T> recortar<T>(List<T> lista) {
+    final paginas = lista.isEmpty ? 1 : (lista.length / porPagina).ceil();
+    if (pagina >= paginas) pagina = paginas - 1;
+    return lista.skip(pagina * porPagina).take(porPagina).toList();
+  }
+
+  /// Solo vale la pena mostrar el paginador si hay más filas que la opción más chica.
+  static bool necesaria(int total) => total > opciones.first;
+}
+
 /// Tabla dentro de una tarjeta que, cuando no cabe, se convierte en una lista de fichas apiladas.
-class TablaResponsiva extends StatelessWidget {
+/// Pagina sola cuando hay más filas que las de una página (25 por defecto).
+class TablaResponsiva extends StatefulWidget {
   const TablaResponsiva({
     super.key,
     required this.columnas,
@@ -90,6 +178,7 @@ class TablaResponsiva extends StatelessWidget {
     this.cargando = false,
     this.error,
     this.pie,
+    this.porPagina = 25,
   });
 
   final List<ColumnaTabla> columnas;
@@ -104,15 +193,28 @@ class TablaResponsiva extends StatelessWidget {
   final bool cargando;
   final String? error;
 
-  /// Fila de totales (se muestra en ambos modos).
+  /// Fila de totales (se muestra en ambos modos; suma todas las filas, no solo la página).
   final Widget? pie;
+
+  /// Filas por página al abrir la tabla (el usuario puede cambiarlo).
+  final int porPagina;
+
+  @override
+  State<TablaResponsiva> createState() => _TablaResponsivaState();
+}
+
+class _TablaResponsivaState extends State<TablaResponsiva> {
+  late final _paginacion = Paginacion(porPagina: widget.porPagina);
 
   @override
   Widget build(BuildContext context) {
+    final w = widget;
+    final columnas = w.columnas, filas = w.filas, celdas = w.celdas, ficha = w.ficha, alTocar = w.alTocar;
+    final indices = _paginacion.recortar(List<int>.generate(filas, (i) => i));
     return Card(
       clipBehavior: Clip.antiAlias,
       child: LayoutBuilder(builder: (context, constraints) {
-        final tabla = constraints.maxWidth >= anchoTabla;
+        final tabla = constraints.maxWidth >= w.anchoTabla;
         final encabezado = estiloEncabezadoTabla(context);
 
         Widget fila(int i) {
@@ -132,16 +234,16 @@ class TablaResponsiva extends StatelessWidget {
                   ]),
                 )
               : Padding(padding: const EdgeInsets.fromLTRB(16, 12, 16, 12), child: ficha(i));
-          return alTocar == null ? contenido : InkWell(onTap: () => alTocar!(i), child: contenido);
+          return alTocar == null ? contenido : InkWell(onTap: () => alTocar(i), child: contenido);
         }
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (cargando) const LinearProgressIndicator(),
-            if (error != null) Padding(padding: const EdgeInsets.all(16), child: InlineBanner.error(error!)),
-            if (!cargando && error == null && filas == 0)
-              vacio ?? const EmptyState(icono: Icons.inbox_outlined, titulo: 'No hay registros que mostrar'),
+            if (w.cargando) const LinearProgressIndicator(),
+            if (w.error != null) Padding(padding: const EdgeInsets.all(16), child: InlineBanner.error(w.error!)),
+            if (!w.cargando && w.error == null && filas == 0)
+              w.vacio ?? const EmptyState(icono: Icons.inbox_outlined, titulo: 'No hay registros que mostrar'),
             if (tabla && filas > 0) ...[
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 14, 20, 12),
@@ -159,13 +261,29 @@ class TablaResponsiva extends StatelessWidget {
               ),
               const Divider(),
             ],
-            for (var i = 0; i < filas; i++) ...[
-              if (i > 0) const Divider(),
+            for (final (n, i) in indices.indexed) ...[
+              if (n > 0) const Divider(),
               fila(i),
             ],
-            if (pie != null && filas > 0) ...[
+            if (Paginacion.necesaria(filas)) ...[
+              const Divider(),
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: tabla ? 20 : 12, vertical: 6),
+                child: Paginador(
+                  total: filas,
+                  pagina: _paginacion.pagina,
+                  porPagina: _paginacion.porPagina,
+                  alCambiarPagina: (p) => setState(() => _paginacion.pagina = p),
+                  alCambiarPorPagina: (n) => setState(() {
+                    _paginacion.porPagina = n;
+                    _paginacion.pagina = 0;
+                  }),
+                ),
+              ),
+            ],
+            if (w.pie != null && filas > 0) ...[
               const Divider(thickness: 1.5),
-              Padding(padding: EdgeInsets.symmetric(horizontal: tabla ? 20 : 16, vertical: 14), child: pie!),
+              Padding(padding: EdgeInsets.symmetric(horizontal: tabla ? 20 : 16, vertical: 14), child: w.pie!),
             ],
           ],
         );

@@ -24,6 +24,7 @@ class _LibroDiarioScreenState extends State<LibroDiarioScreen> with CargaDatos<L
   DateTime _desde = inicioDeMes();
   DateTime _hasta = hoy();
   String? _origen;
+  final _paginacion = Paginacion(porPagina: 10);
 
   @override
   Future<List<Partida>> obtener() => context.read<ContabilidadRepository>().libroDiario(_desde, _hasta, origen: _origen);
@@ -67,7 +68,23 @@ class _LibroDiarioScreenState extends State<LibroDiarioScreen> with CargaDatos<L
         if (error != null) InlineBanner.error(error!),
         if (!cargando && error == null && lista.isEmpty)
           const Card(child: EmptyState(icono: Icons.menu_book_outlined, titulo: 'No hay partidas en este rango')),
-        for (final p in lista) _TarjetaPartida(partida: p),
+        for (final p in _paginacion.recortar(lista)) _TarjetaPartida(partida: p),
+        if (Paginacion.necesaria(lista.length))
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              child: Paginador(
+                                total: lista.length,
+                                pagina: _paginacion.pagina,
+                                porPagina: _paginacion.porPagina,
+                                alCambiarPagina: (p) => setState(() => _paginacion.pagina = p),
+                                alCambiarPorPagina: (n) => setState(() {
+                                  _paginacion.porPagina = n;
+                                  _paginacion.pagina = 0;
+                                }),
+                              ),
+            ),
+          ),
       ],
     );
   }

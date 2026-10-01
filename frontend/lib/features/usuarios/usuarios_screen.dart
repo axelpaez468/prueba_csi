@@ -5,6 +5,7 @@ import '../../core/network/api_exception.dart';
 import '../../core/security/permisos.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_shell.dart';
+import '../../core/widgets/erp_widgets.dart';
 import '../../data/models/usuario.dart';
 import '../../data/repositories/usuario_repository.dart';
 import '../auth/session_controller.dart';
@@ -27,6 +28,7 @@ class _UsuariosScreenState extends State<UsuariosScreen> {
   bool _cargando = true;
   String? _error;
   _Filtro _filtro = _Filtro.todos;
+  final _paginacion = Paginacion();
 
   UsuarioRepository get _repo => context.read<UsuarioRepository>();
 
@@ -198,7 +200,10 @@ class _UsuariosScreenState extends State<UsuariosScreen> {
                       ],
                       selected: {_filtro},
                       showSelectedIcon: false,
-                      onSelectionChanged: (s) => setState(() => _filtro = s.first),
+                      onSelectionChanged: (s) => setState(() {
+                        _filtro = s.first;
+                        _paginacion.pagina = 0;
+                      }),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -220,13 +225,29 @@ class _UsuariosScreenState extends State<UsuariosScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
                                   if (tabla && visibles.isNotEmpty) const _EncabezadoTabla(),
-                                  for (final (i, u) in visibles.indexed) ...[
+                                  for (final (i, u) in _paginacion.recortar(visibles).indexed) ...[
                                     if (i > 0 || tabla) const Divider(),
                                     _FilaUsuario(
                                       usuario: u,
                                       tabla: tabla,
                                       esUnoMismo: u.email == miEmail,
                                       alElegir: (a) => _accion(a, u),
+                                    ),
+                                  ],
+                                  if (Paginacion.necesaria(visibles.length)) ...[
+                                    const Divider(),
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                                      child: Paginador(
+                                total: visibles.length,
+                                pagina: _paginacion.pagina,
+                                porPagina: _paginacion.porPagina,
+                                alCambiarPagina: (p) => setState(() => _paginacion.pagina = p),
+                                alCambiarPorPagina: (n) => setState(() {
+                                  _paginacion.porPagina = n;
+                                  _paginacion.pagina = 0;
+                                }),
+                              ),
                                     ),
                                   ],
                                 ],
