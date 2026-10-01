@@ -3,12 +3,14 @@ import 'dart:convert';
 import 'package:flutter/gestures.dart';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:pedidos_app/core/network/api_client.dart';
 import 'package:pedidos_app/core/security/session.dart';
 import 'package:pedidos_app/core/theme/app_theme.dart';
+import 'package:pedidos_app/core/util/formatters.dart';
 import 'package:pedidos_app/data/models/pedido.dart';
 import 'package:pedidos_app/data/models/producto.dart';
 import 'package:pedidos_app/data/repositories/auth_repository.dart';
@@ -44,6 +46,7 @@ import 'package:pedidos_app/features/inventario/inventario_screen.dart';
 import 'package:pedidos_app/features/panel/panel_screen.dart';
 import 'package:pedidos_app/features/shell/modulos.dart';
 import 'package:pedidos_app/features/productos/productos_screen.dart';
+import 'package:pedidos_app/features/reportes/pronostico_screen.dart';
 import 'package:pedidos_app/features/order/order_confirmation_screen.dart';
 import 'package:pedidos_app/features/usuarios/usuario_form_dialog.dart';
 import 'package:pedidos_app/features/usuarios/usuarios_screen.dart';
@@ -160,6 +163,28 @@ Object? _respuestaErp(String ruta) => switch (ruta) {
               'estadoDesde': '2026-09-25T15:30:00Z', 'puedeAvanzarA': i == 2 ? 'DESPACHADO' : (i == 0 ? 'REVISADO' : null),
             },
         ],
+      '/api/reportes/pronostico' => {
+          'desde': '2026-09-01', 'hasta': '2026-09-30', 'agrupacion': 'DIA',
+          'facturasCerradas': 120, 'cerrado': 1234567.89, 'facturasAbiertas': 45, 'abierto': 456789.12,
+          'ponderadoAbierto': 210345.67, 'pronostico': 1444913.56, 'probabilidadAbiertas': 46.1, 'avanceCierre': 85.4,
+          'etapas': [
+            for (final (i, (e, prob)) in [('NUEVO', 10), ('REVISADO', 25), ('AUTORIZADO', 50), ('DESPACHADO', 75), ('EN_CAMINO', 90), ('ENTREGADO', 100)].indexed)
+              {'estado': e, 'nombre': e, 'probabilidad': prob, 'facturas': i == 1 ? 0 : 10 + i, 'total': i == 1 ? 0 : 98765.43 * (i + 1),
+                'ponderado': i == 1 ? 0 : 98765.43 * (i + 1) * prob / 100},
+          ],
+          'tendencia': [
+            for (var d = 1; d <= 30; d++)
+              {'desde': '2026-09-${d.toString().padLeft(2, '0')}', 'hasta': '2026-09-${d.toString().padLeft(2, '0')}',
+                'cerrado': d < 25 ? d * 2000.0 : 0, 'abierto': d >= 20 ? d * 1500.0 : 0, 'ponderado': d >= 20 ? d * 500.0 : 0},
+          ],
+          'porVendedor': [
+            for (var i = 1; i <= 3; i++)
+              {'usuarioId': i, 'vendedor': 'María Fernanda Hernández $i', 'facturas': 40 + i, 'cerrado': 400000.0 * i,
+                'abierto': 150000.0, 'ponderado': 70000.0, 'pronostico': 400000.0 * i + 70000},
+          ],
+          'probabilidadesActualizadasEn': '2026-09-28T15:30:00Z', 'probabilidadesActualizadasPor': 'admin',
+        },
+      '/api/reportes/pronostico/probabilidades' => {'mensaje': 'Se guardaron las probabilidades de cierre.'},
       '/api/reportes/ventas' => {
           'porDepartamento': [
             {'departamento': 'Guatemala', 'iso': 'GT-GU', 'facturas': 300, 'unidades': 900, 'total': 950000.5, 'participacion': 50.4,
@@ -500,12 +525,24 @@ void main() {
           expect(find.byTooltip('Contabilidad'), findsOneWidget);
           await tester.tap(find.byTooltip('Ventas'));
           await tester.pumpAndSettle();
-          expect(find.byType(PopupMenuItem<Modulo>), findsNWidgets(5));
+          expect(find.byType(PopupMenuItem<Modulo>), findsNWidgets(4));
+          await tester.sendKeyEvent(LogicalKeyboardKey.escape); // cierra el submenú
+          await tester.pumpAndSettle();
+          // Los reportes tienen su propia área en la barra.
+          await tester.ensureVisible(find.byTooltip('Reportes')); // con letras anchas la barra se desplaza
+          await tester.pumpAndSettle();
+          await tester.tap(find.byTooltip('Reportes'));
+          await tester.pumpAndSettle();
+          expect(find.byType(PopupMenuItem<Modulo>), findsNWidgets(2));
+          expect(find.text('Pipeline y pronóstico'), findsWidgets);
         } else {
           // Tablet y celular: botón de menú con un panel lateral agrupado por área.
           await tester.tap(find.byTooltip('Menú'));
           await tester.pumpAndSettle();
           expect(find.text('VENTAS'), findsOneWidget);
+          // El panel es una lista: en pantallas chicas hay que desplazarse para llegar al área de reportes.
+          await tester.scrollUntilVisible(find.text('REPORTES'), 150, scrollable: find.byType(Scrollable).last);
+          await tester.scrollUntilVisible(find.text('Pipeline y pronóstico'), 150, scrollable: find.byType(Scrollable).last);
           expect(find.text('Reportes de ventas'), findsWidgets);
         }
       });
@@ -514,13 +551,44 @@ void main() {
         await _montar(tester, tamano, const ClientesScreen(), rol: 'VENDEDOR');
         if (tamano.width >= 1000) {
           // Pocos módulos: van uno al lado del otro, sin submenú de área.
-          for (final descripcion in ['Productos para vender', 'Facturas emitidas', 'Por día, producto, vendedor y cliente']) {
+          for (final descripcion in [
+            'Productos para vender',
+            'Facturas emitidas',
+            'Por día, producto, vendedor y cliente',
+            'Forecast según la probabilidad de cierre de cada etapa',
+          ]) {
             expect(find.byTooltip(descripcion), findsOneWidget);
           }
           expect(find.byType(PopupMenuButton<Modulo>), findsNothing);
         } else {
           expect(find.byTooltip('Menú'), findsOneWidget);
         }
+      });
+
+      testWidgets('pipeline y pronóstico', (tester) async {
+        await _montar(tester, tamano, const PronosticoScreen());
+        expect(find.text('Pipeline y pronóstico'), findsOneWidget);
+        expect(find.text('Pronóstico del período'), findsOneWidget);
+        expect(find.text(formatearMoneda(1444913.56)), findsWidgets);
+        expect(find.text('Embudo del pipeline'), findsOneWidget);
+        expect(find.text('Tendencia por día'), findsOneWidget);
+
+        // El administrador edita las probabilidades.
+        await tester.scrollUntilVisible(find.text('Editar'), 300, scrollable: find.byType(Scrollable).first);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Editar'));
+        await tester.pumpAndSettle();
+        expect(find.text('Probabilidad de cierre'), findsOneWidget);
+        await tester.tap(find.text('Guardar'));
+        await tester.pumpAndSettle();
+        expect(find.text('Se guardaron las probabilidades de cierre.'), findsOneWidget);
+      });
+
+      testWidgets('pronóstico del vendedor: sin tabla por vendedor ni edición', (tester) async {
+        await _montar(tester, tamano, const PronosticoScreen(), rol: 'VENDEDOR');
+        expect(find.text('Mi pipeline y pronóstico'), findsOneWidget);
+        expect(find.text('Editar'), findsNothing);
+        expect(find.text('Pronóstico por vendedor'), findsNothing);
       });
 
       testWidgets('pipeline de ventas', (tester) async {

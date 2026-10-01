@@ -394,6 +394,46 @@ class SelectorRango extends StatelessWidget {
   }
 }
 
+/// Menú de períodos rápidos (hoy, esta semana, este mes...) para los reportes.
+class MenuPeriodos extends StatelessWidget {
+  const MenuPeriodos({super.key, required this.alCambiar});
+
+  final void Function(DateTime desde, DateTime hasta) alCambiar;
+
+  void _elegir(String p) {
+    final h = hoy();
+    switch (p) {
+      case 'hoy':
+        alCambiar(h, h);
+      case 'semana':
+        alCambiar(h.subtract(Duration(days: h.weekday - 1)), h);
+      case 'mes':
+        alCambiar(inicioDeMes(h), h);
+      case 'mesAnterior':
+        alCambiar(DateTime(h.year, h.month - 1, 1), DateTime(h.year, h.month, 0));
+      case 'trimestre':
+        alCambiar(h.subtract(const Duration(days: 89)), h);
+      case 'anio':
+        alCambiar(DateTime(h.year, 1, 1), h);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => PopupMenuButton<String>(
+        tooltip: 'Períodos rápidos',
+        onSelected: _elegir,
+        itemBuilder: (_) => const [
+          PopupMenuItem(value: 'hoy', child: Text('Hoy')),
+          PopupMenuItem(value: 'semana', child: Text('Esta semana')),
+          PopupMenuItem(value: 'mes', child: Text('Este mes')),
+          PopupMenuItem(value: 'mesAnterior', child: Text('Mes anterior')),
+          PopupMenuItem(value: 'trimestre', child: Text('Últimos 90 días')),
+          PopupMenuItem(value: 'anio', child: Text('En lo que va del año')),
+        ],
+        icon: const Icon(Icons.tune),
+      );
+}
+
 /// Botón para elegir una sola fecha.
 class SelectorFecha extends StatelessWidget {
   const SelectorFecha({super.key, required this.fecha, required this.alCambiar, this.etiqueta = 'Al'});

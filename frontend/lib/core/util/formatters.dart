@@ -43,3 +43,9 @@ String diaCorto(DateTime d) => '${_dias[d.weekday - 1].substring(0, 3)} ${d.day}
 
 /// "martes 30 de septiembre de 2026".
 String fechaLarga(DateTime d) => '${_dias[d.weekday - 1]} ${d.day} de ${_meses[d.month - 1]} de ${d.year}';
+
+/// "sep" (para ejes de gráficas).
+String mesCorto(DateTime d) => _meses[d.month - 1].substring(0, 3);
+
+/// "50 %" o "37.5 %".
+String formatearPorcentaje(num p) => '${p % 1 == 0 ? p.toStringAsFixed(0) : p.toStringAsFixed(1)} %';

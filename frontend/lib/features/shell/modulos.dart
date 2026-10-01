@@ -15,6 +15,7 @@ import '../cuenta/bitacora_screen.dart';
 import '../inventario/inventario_screen.dart';
 import '../panel/panel_screen.dart';
 import '../productos/productos_screen.dart';
+import '../reportes/pronostico_screen.dart';
 import '../usuarios/usuarios_screen.dart';
 import '../ventas/pipeline_screen.dart';
 import '../ventas/reporte_ventas_screen.dart';
@@ -46,6 +47,7 @@ const grupos = <Grupo>[
   Grupo('Inventario', Icons.inventory_2_outlined),
   Grupo('Compras', Icons.local_shipping_outlined),
   Grupo('Contabilidad', Icons.account_balance_outlined),
+  Grupo('Reportes', Icons.insights_outlined),
   Grupo('Administración', Icons.admin_panel_settings_outlined),
 ];
 
@@ -55,8 +57,6 @@ final modulos = <Modulo>[
   Modulo('Ventas', 'Facturas emitidas', Icons.receipt_long_outlined, 'Ventas', () => const VentasScreen(), (s) => s.consultaVentas),
   Modulo('Pipeline', 'Etapas: revisión, autorización y entrega', Icons.view_kanban_outlined, 'Ventas',
       () => const PipelineScreen(), (s) => s.vePipeline),
-  Modulo('Reportes de ventas', 'Por día, producto, vendedor y cliente', Icons.insights_outlined, 'Ventas',
-      () => const ReporteVentasScreen(), (s) => s.consultaVentas),
   Modulo('Clientes', 'NIT y datos de facturación', Icons.people_alt_outlined, 'Ventas', () => const ClientesScreen(),
       (s) => s.gestionaClientes),
   Modulo('Productos', 'Alta, ficha, fotos y baja', Icons.category_outlined, 'Inventario', () => const ProductosScreen(),
@@ -73,6 +73,10 @@ final modulos = <Modulo>[
       () => const CuentasScreen(), (s) => s.llevaContabilidad),
   Modulo('Estados financieros', 'Balance y estado de resultados', Icons.assessment_outlined, 'Contabilidad',
       () => const ReportesScreen(), (s) => s.llevaContabilidad),
+  Modulo('Reportes de ventas', 'Por día, producto, vendedor y cliente', Icons.bar_chart_outlined, 'Reportes',
+      () => const ReporteVentasScreen(), (s) => s.consultaVentas),
+  Modulo('Pipeline y pronóstico', 'Forecast según la probabilidad de cierre de cada etapa', Icons.trending_up, 'Reportes',
+      () => const PronosticoScreen(), (s) => s.consultaVentas),
   Modulo('Usuarios', 'Altas, roles y accesos', Icons.group_outlined, 'Administración', () => const UsuariosScreen(),
       (s) => s.esAdmin),
   Modulo('Bitácora de accesos', 'Auditoría de inicios de sesión', Icons.manage_search, 'Administración',

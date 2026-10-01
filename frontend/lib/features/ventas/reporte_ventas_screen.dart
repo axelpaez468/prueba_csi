@@ -40,23 +40,6 @@ class _ReporteVentasScreenState extends State<ReporteVentasScreen> with CargaDat
     recargar();
   }
 
-  void _periodo(String p) {
-    final h = hoy();
-    switch (p) {
-      case 'hoy':
-        _rango(h, h);
-      case 'semana':
-        _rango(h.subtract(Duration(days: h.weekday - 1)), h);
-      case 'mes':
-        _rango(inicioDeMes(h), h);
-      case 'mesAnterior':
-        final inicio = DateTime(h.year, h.month - 1, 1);
-        _rango(inicio, DateTime(h.year, h.month, 0));
-      case 'anio':
-        _rango(DateTime(h.year, 1, 1), h);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final r = datos;
@@ -75,18 +58,7 @@ class _ReporteVentasScreenState extends State<ReporteVentasScreen> with CargaDat
       alRefrescar: recargar,
       acciones: [
         SelectorRango(desde: _desde, hasta: _hasta, alCambiar: _rango),
-        PopupMenuButton<String>(
-          tooltip: 'Períodos rápidos',
-          onSelected: _periodo,
-          itemBuilder: (_) => const [
-            PopupMenuItem(value: 'hoy', child: Text('Hoy')),
-            PopupMenuItem(value: 'semana', child: Text('Esta semana')),
-            PopupMenuItem(value: 'mes', child: Text('Este mes')),
-            PopupMenuItem(value: 'mesAnterior', child: Text('Mes anterior')),
-            PopupMenuItem(value: 'anio', child: Text('En lo que va del año')),
-          ],
-          icon: const Icon(Icons.tune),
-        ),
+        MenuPeriodos(alCambiar: _rango),
       ],
       children: [
         if (cargando) const LinearProgressIndicator(),

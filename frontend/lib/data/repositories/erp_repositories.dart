@@ -3,6 +3,7 @@ import '../../core/util/formatters.dart';
 import '../models/erp.dart';
 import '../models/pedido.dart';
 import '../models/pipeline.dart';
+import '../models/pronostico.dart';
 
 String _q(String? texto) =>
     (texto == null || texto.trim().isEmpty) ? '' : Uri.encodeQueryComponent(texto.trim());
@@ -136,6 +137,15 @@ class ReporteRepository {
 
   Future<ReporteVentas> ventas(DateTime desde, DateTime hasta) async => ReporteVentas.fromJson(
       await _api.get('/api/reportes/ventas?desde=${fechaIso(desde)}&hasta=${fechaIso(hasta)}') as Map<String, dynamic>);
+
+  Future<Pronostico> pronostico(DateTime desde, DateTime hasta) async => Pronostico.fromJson(
+      await _api.get('/api/reportes/pronostico?desde=${fechaIso(desde)}&hasta=${fechaIso(hasta)}') as Map<String, dynamic>);
+
+  /// Probabilidad de cierre (0 a 100) por etapa. Solo administración.
+  Future<String> guardarProbabilidades(Map<String, double> probabilidades) async =>
+      ((await _api.put('/api/reportes/pronostico/probabilidades', {
+        'etapas': [for (final e in probabilidades.entries) {'estado': e.key, 'probabilidad': e.value}],
+      })) as Map<String, dynamic>)['mensaje'] as String;
 }
 
 /// Departamentos y municipios de Guatemala. Se descargan una vez por sesión de la app.
