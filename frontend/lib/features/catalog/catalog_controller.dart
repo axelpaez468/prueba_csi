@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../../core/network/api_client.dart';
 import '../../core/network/api_exception.dart';
 import '../../data/models/producto.dart';
 import '../../data/repositories/producto_repository.dart';
@@ -29,6 +30,8 @@ class CatalogController extends ChangeNotifier {
       // El ApiClient ya cerró la sesión; la app vuelve al login.
     } on ApiException catch (e) {
       _error = e.message;
+    } on TypeError {
+      _error = ApiClient.respuestaInesperada;
     } finally {
       _cargando = false;
       notifyListeners();

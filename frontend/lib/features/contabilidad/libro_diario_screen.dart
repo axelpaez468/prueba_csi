@@ -65,7 +65,7 @@ class _LibroDiarioScreenState extends State<LibroDiarioScreen> with CargaDatos<L
       children: [
         if (compacto) _filtroOrigen(expandido: true),
         if (cargando) const LinearProgressIndicator(),
-        if (error != null) InlineBanner.error(error!),
+        if (error != null) InlineBanner.error(error!, alReintentar: recargar),
         if (!cargando && error == null && lista.isEmpty)
           const Card(child: EmptyState(icono: Icons.menu_book_outlined, titulo: 'No hay partidas en este rango')),
         for (final p in _paginacion.recortar(lista)) _TarjetaPartida(partida: p),
@@ -260,7 +260,7 @@ class _NuevaPartidaScreenState extends State<NuevaPartidaScreen> with CargaDatos
       maxWidth: 960,
       children: [
         if (cargando) const LinearProgressIndicator(),
-        if (error != null) InlineBanner.error(error!),
+        if (error != null) InlineBanner.error(error!, alReintentar: recargar),
         Card(
           child: Padding(
             padding: const EdgeInsets.all(20),

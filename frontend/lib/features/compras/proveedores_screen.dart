@@ -71,6 +71,7 @@ class _ProveedoresScreenState extends State<ProveedoresScreen> with CargaDatos<P
         TablaResponsiva(
           cargando: cargando,
           error: error,
+          alReintentar: recargar,
           filas: lista.length,
           alTocar: gestiona ? (i) => _abrir(lista[i]) : null,
           columnas: const [

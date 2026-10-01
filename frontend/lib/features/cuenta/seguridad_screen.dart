@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/network/api_client.dart';
 import '../../core/network/api_exception.dart';
 import '../../core/security/session.dart';
 import '../../core/theme/app_theme.dart';
@@ -49,6 +50,8 @@ class _SeguridadScreenState extends State<SeguridadScreen> {
       // La app vuelve al login.
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
+    } on TypeError {
+      if (mounted) setState(() => _error = ApiClient.respuestaInesperada);
     }
   }
 
@@ -135,7 +138,7 @@ class _SeguridadScreenState extends State<SeguridadScreen> {
               Padding(
                 padding: EdgeInsets.fromLTRB(margen, 0, margen, 32),
                 child: _error != null
-                    ? InlineBanner.error(_error!)
+                    ? InlineBanner.error(_error!, alReintentar: _cargar)
                     : ancho >= Breakpoints.amplio
                         ? Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                             Expanded(child: izquierda),

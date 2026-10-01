@@ -223,13 +223,14 @@ class Casilla extends StatelessWidget {
 
 /// Aviso de error o información dentro de una página.
 class InlineBanner extends StatelessWidget {
-  const InlineBanner.error(this.mensaje, {super.key})
+  const InlineBanner.error(this.mensaje, {super.key, this.alReintentar})
       : color = AppColors.danger,
         fondo = AppColors.dangerBg,
         icono = Icons.error_outline;
 
   const InlineBanner.info(this.mensaje, {super.key})
-      : color = AppColors.warning,
+      : alReintentar = null,
+        color = AppColors.warning,
         fondo = AppColors.warningBg,
         icono = Icons.info_outline;
 
@@ -237,6 +238,9 @@ class InlineBanner extends StatelessWidget {
   final Color color;
   final Color fondo;
   final IconData icono;
+
+  /// Si se indica, muestra "Reintentar" (en escritorio no hay gesto de deslizar para recargar).
+  final VoidCallback? alReintentar;
 
   @override
   Widget build(BuildContext context) {
@@ -253,6 +257,19 @@ class InlineBanner extends StatelessWidget {
           Icon(icono, color: color, size: 20),
           const SizedBox(width: 10),
           Expanded(child: Text(mensaje, style: TextStyle(color: color, fontWeight: FontWeight.w500))),
+          if (alReintentar != null) ...[
+            const SizedBox(width: 8),
+            TextButton.icon(
+              onPressed: alReintentar,
+              style: TextButton.styleFrom(
+                foregroundColor: color,
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+              ),
+              icon: const Icon(Icons.refresh, size: 18),
+              label: const Text('Reintentar'),
+            ),
+          ],
         ],
       ),
     );

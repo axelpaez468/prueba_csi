@@ -75,6 +75,7 @@ class _OrdenesScreenState extends State<OrdenesScreen> with CargaDatos<OrdenesSc
         TablaResponsiva(
           cargando: cargando,
           error: error,
+          alReintentar: recargar,
           filas: lista.length,
           alTocar: (i) => _abrir(lista[i]),
           vacio: const EmptyState(icono: Icons.local_shipping_outlined, titulo: 'No hay órdenes en este estado'),
@@ -190,7 +191,7 @@ class _OrdenDetalleScreenState extends State<OrdenDetalleScreen> with CargaDatos
               ),
           ]),
         if (cargando || _procesando) const LinearProgressIndicator(),
-        if (error != null) InlineBanner.error(error!),
+        if (error != null) InlineBanner.error(error!, alReintentar: recargar),
         if (o != null) ...[
           Card(
             child: Padding(
@@ -405,7 +406,7 @@ class _NuevaOrdenScreenState extends State<NuevaOrdenScreen>
       maxWidth: 960,
       children: [
         if (cargando) const LinearProgressIndicator(),
-        if (error != null) InlineBanner.error(error!),
+        if (error != null) InlineBanner.error(error!, alReintentar: recargar),
         Card(
           child: Padding(
             padding: const EdgeInsets.all(20),

@@ -72,7 +72,13 @@ class ApiClient {
 
     final status = response.statusCode;
     if (status >= 200 && status < 300) {
-      return response.body.isEmpty ? null : jsonDecode(utf8.decode(response.bodyBytes));
+      if (response.body.isEmpty) return null;
+      try {
+        return jsonDecode(utf8.decode(response.bodyBytes));
+      } on FormatException {
+        // P. ej. un proxy que responde su propia página HTML: mejor un mensaje claro que una pantalla vacía.
+        throw const ApiException(respuestaInesperada);
+      }
     }
 
     final mensaje = _mensajeDeError(response);
@@ -82,6 +88,8 @@ class ApiClient {
     }
     throw ApiException(mensaje ?? _mensajePorEstado(status), statusCode: status);
   }
+
+  static const respuestaInesperada = 'El servidor envió una respuesta inesperada. Intente de nuevo más tarde.';
 
   /// La API responde errores como { "error": "..." }.
   static String? _mensajeDeError(http.Response response) {

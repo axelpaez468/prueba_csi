@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../network/api_client.dart';
 import '../network/api_exception.dart';
 import '../theme/app_theme.dart';
 import '../util/formatters.dart';
@@ -35,6 +36,10 @@ mixin CargaDatos<W extends StatefulWidget, T> on State<W> {
       // La app vuelve al login.
     } on ApiException catch (e) {
       if (mounted) setState(() => error = e.message);
+    } on TypeError catch (e) {
+      // Datos con otra forma de la esperada (versión distinta de la API): mensaje claro en vez de pantalla vacía.
+      debugPrint('Respuesta con formato inesperado: $e');
+      if (mounted) setState(() => error = ApiClient.respuestaInesperada);
     } finally {
       if (mounted) setState(() => cargando = false);
     }
@@ -177,6 +182,7 @@ class TablaResponsiva extends StatefulWidget {
     this.vacio,
     this.cargando = false,
     this.error,
+    this.alReintentar,
     this.pie,
     this.porPagina = 25,
   });
@@ -192,6 +198,9 @@ class TablaResponsiva extends StatefulWidget {
   final Widget? vacio;
   final bool cargando;
   final String? error;
+
+  /// Acción del botón "Reintentar" del mensaje de error.
+  final VoidCallback? alReintentar;
 
   /// Fila de totales (se muestra en ambos modos; suma todas las filas, no solo la página).
   final Widget? pie;
@@ -241,7 +250,7 @@ class _TablaResponsivaState extends State<TablaResponsiva> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (w.cargando) const LinearProgressIndicator(),
-            if (w.error != null) Padding(padding: const EdgeInsets.all(16), child: InlineBanner.error(w.error!)),
+            if (w.error != null) Padding(padding: const EdgeInsets.all(16), child: InlineBanner.error(w.error!, alReintentar: w.alReintentar)),
             if (!w.cargando && w.error == null && filas == 0)
               w.vacio ?? const EmptyState(icono: Icons.inbox_outlined, titulo: 'No hay registros que mostrar'),
             if (tabla && filas > 0) ...[

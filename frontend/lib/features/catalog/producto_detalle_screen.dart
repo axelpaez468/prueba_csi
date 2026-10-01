@@ -164,7 +164,7 @@ class _ProductoDetalleScreenState extends State<ProductoDetalleScreen>
                 ),
                 const SizedBox(height: 16),
                 if (cargando) const LinearProgressIndicator(),
-                if (error != null) InlineBanner.error(error!),
+                if (error != null) InlineBanner.error(error!, alReintentar: recargar),
                 if (detalle != null)
                   LayoutBuilder(builder: (context, c) {
                     final descripcion = _Descripcion(texto: detalle.descripcion);

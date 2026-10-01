@@ -69,6 +69,7 @@ class _ClientesScreenState extends State<ClientesScreen> with CargaDatos<Cliente
         TablaResponsiva(
           cargando: cargando,
           error: error,
+          alReintentar: recargar,
           filas: lista.length,
           columnas: const [
             ColumnaTabla('NIT', flex: 2),
@@ -167,7 +168,7 @@ class _SeleccionarClienteDialogState extends State<SeleccionarClienteDialog>
             ),
             const SizedBox(height: 8),
             if (cargando) const LinearProgressIndicator(),
-            if (error != null) InlineBanner.error(error!),
+            if (error != null) InlineBanner.error(error!, alReintentar: recargar),
             Expanded(
               child: lista.isEmpty && !cargando
                   ? const EmptyState(icono: Icons.person_search_outlined, titulo: 'Sin resultados', mensaje: 'Crea el cliente con su NIT.')

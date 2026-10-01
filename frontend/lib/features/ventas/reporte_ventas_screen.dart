@@ -62,7 +62,7 @@ class _ReporteVentasScreenState extends State<ReporteVentasScreen> with CargaDat
       ],
       children: [
         if (cargando) const LinearProgressIndicator(),
-        if (error != null) InlineBanner.error(error!),
+        if (error != null) InlineBanner.error(error!, alReintentar: recargar),
         if (r != null) ...[
           _Indicadores(actual: r.resumen, anterior: r.anterior),
           Card(

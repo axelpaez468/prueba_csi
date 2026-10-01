@@ -47,7 +47,7 @@ class _PanelScreenState extends State<PanelScreen> with CargaDatos<PanelScreen, 
         ),
       ],
       children: [
-        if (error != null) InlineBanner.error(error!),
+        if (error != null) InlineBanner.error(error!, alReintentar: recargar),
         if (cargando && p == null) const LinearProgressIndicator(),
         if (p != null) ...[
           RejillaAdaptable(children: [

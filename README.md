@@ -168,13 +168,19 @@ Todos los errores tienen el mismo formato: `{ "error": "mensaje legible" }`.
 ### Pruebas automatizadas
 
 ```bash
-cd backend && dotnet test      # 162 pruebas (1 se omite si no hay SQL Server; ver abajo)
-cd frontend && flutter test    # 210 pruebas
+cd backend && dotnet test      # 254 pruebas; 73 de ellas (HTTP y concurrencia) se omiten si no hay SQL Server
+cd frontend && flutter test    # 486 pruebas
 ```
 
 - **Backend:** usa SQLite en memoria, que a diferencia del proveedor InMemory de EF soporta transacciones reales, `ExecuteUpdate` y *check constraints*. Cubre: precio/total calculados en el servidor aunque el cliente los envíe; descuento de stock; rollback completo si una línea falla; última unidad vendida una sola vez; cantidad ≤ 0; producto inexistente; producto duplicado; pedido vacío; pedido ajeno no visible; y login válido/inválido.
-- **Concurrencia real contra SQL Server:** la prueba lanza 20 pedidos simultáneos por la última unidad. Se activa definiendo `PEDIDOS_TEST_SQLSERVER` con una cadena de conexión (usuario con permiso para crear bases), por ejemplo `Server=.\SQLEXPRESS;Trusted_Connection=True;TrustServerCertificate=True`.
-- **Frontend:** repositorio de pedidos (envía solo `productoId` y `cantidad` con `Bearer`, usa el total del servidor y maneja 400 y 401), carrito (subtotal referencial y **doble clic = un solo pedido**) y widget de catálogo (producto sin stock deshabilitado). Además, **pruebas de layout responsive**: login, catálogo, carrito y comprobante se renderizan a 320, 375, 768, 1366 y 1920 px, y cualquier desborde hace fallar la prueba.
+- **Contra la API real y SQL Server** (`backend/tests/Pedidos.Tests/Http/`): se activan definiendo `PEDIDOS_TEST_SQLSERVER` con una cadena de conexión de un usuario que pueda crear bases, por ejemplo `Server=.\SQLEXPRESS;Trusted_Connection=True;TrustServerCertificate=True`. La prueba crea una base temporal (y la borra al terminar) y arranca la API compilada como proceso, en modo producción. El correo y el servicio de contraseñas filtradas se simulan con servidores locales, así no se depende de internet. Cada cliente HTTP sale de su propia IP de loopback (`127.0.0.x`), para que los límites por IP no se mezclen entre pruebas. Cubren:
+  - **Permisos:** cada endpoint × cada rol y sin sesión. Una prueba con reflexión falla si se agrega un endpoint sin revisar sus permisos.
+  - **Sesiones:** tokens firmados con otra clave, vencidos, alterados, `alg: none`, de otro emisor o audiencia; el token del primer paso del login usado como sesión; cierre de sesiones al cambiar contraseña, rol o desactivar.
+  - **Entradas:** JSON roto o con tipos incorrectos, listas con `null`, cuerpos y URL gigantes, inyección SQL y comodines en búsquedas, HTML/XSS, fechas inválidas, archivos que no son imagen, cabeceras de seguridad, CORS y Swagger oculto.
+  - **Flujos completos entre roles:** venta por todo el pipeline con inventario, partida contable y reportes; compra con costo promedio; invitación y recuperación por correo; ajustes; fotos.
+  - **Concurrencia real:** últimas unidades, la misma venta movida por dos personas, la misma orden recibida dos veces, ajustes simultáneos y registros duplicados.
+  - **Límites contra abuso:** login, recuperación, ventas por usuario, límite global y bloqueo por fuerza bruta.
+- **Frontend:** repositorio de pedidos (envía solo `productoId` y `cantidad` con `Bearer`, usa el total del servidor y maneja 400 y 401), carrito (subtotal referencial y **doble clic = un solo pedido**) y widget de catálogo (producto sin stock deshabilitado). Además, **pruebas de layout responsive**: login, catálogo, carrito y comprobante se renderizan a 320, 375, 768, 1366 y 1920 px, y cualquier desborde hace fallar la prueba. **Escenarios de error en todas las pantallas** del menú y de detalle: 500 con y sin mensaje, 502 en HTML de un proxy, sin conexión, 200 con HTML o con datos en otro formato, 403, 429, 401 (vuelve al login), carga lenta y respuesta tardía tras salir de la pantalla. En cada caso la pantalla explica qué pasó y ofrece **Reintentar**. También el login con el servidor caído y los formularios rechazados por el servidor (no se pierde lo escrito y no hay doble envío).
 
 ---
 

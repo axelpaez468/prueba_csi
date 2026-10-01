@@ -62,6 +62,7 @@ class _VentasScreenState extends State<VentasScreen> with CargaDatos<VentasScree
         TablaResponsiva(
           cargando: cargando,
           error: error,
+          alReintentar: recargar,
           filas: lista.length,
           alTocar: (i) => _abrir(lista[i]),
           vacio: const EmptyState(icono: Icons.receipt_long_outlined, titulo: 'No hay ventas en este rango'),
@@ -189,7 +190,7 @@ class _VentaDetalleScreenState extends State<VentaDetalleScreen> with CargaDatos
       alRefrescar: recargar,
       children: [
         if (cargando || _avanzando) const LinearProgressIndicator(),
-        if (error != null) InlineBanner.error(error!),
+        if (error != null) InlineBanner.error(error!, alReintentar: recargar),
         if (p != null)
           LayoutBuilder(builder: (context, c) => c.maxWidth >= 1000
               ? Row(crossAxisAlignment: CrossAxisAlignment.start, children: [

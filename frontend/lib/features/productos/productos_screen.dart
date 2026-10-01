@@ -148,7 +148,7 @@ class _ProductosScreenState extends State<ProductosScreen> with CargaDatos<Produ
           onSelectionChanged: (s) => setState(() => _filtro = s.first),
         ),
         if (cargando) const LinearProgressIndicator(),
-        if (error != null) InlineBanner.error(error!),
+        if (error != null) InlineBanner.error(error!, alReintentar: recargar),
         if (!cargando && error == null && visibles.isEmpty)
           const Card(child: EmptyState(icono: Icons.inventory_2_outlined, titulo: 'No hay productos que mostrar')),
         RejillaAdaptable(

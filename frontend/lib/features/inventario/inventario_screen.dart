@@ -114,6 +114,7 @@ class _InventarioScreenState extends State<InventarioScreen> with CargaDatos<Inv
         TablaResponsiva(
           cargando: cargando,
           error: error,
+          alReintentar: recargar,
           filas: lista.length,
           anchoTabla: 900,
           alTocar: (i) => _kardex(lista[i]),
@@ -192,6 +193,7 @@ class _KardexScreenState extends State<KardexScreen> with CargaDatos<KardexScree
         TablaResponsiva(
           cargando: cargando,
           error: error,
+          alReintentar: recargar,
           filas: movimientos.length,
           anchoTabla: 860,
           vacio: const EmptyState(icono: Icons.swap_vert, titulo: 'Sin movimientos todavía'),

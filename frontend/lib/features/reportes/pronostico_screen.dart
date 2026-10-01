@@ -86,7 +86,7 @@ class _PronosticoScreenState extends State<PronosticoScreen> with CargaDatos<Pro
       ],
       children: [
         if (cargando) const LinearProgressIndicator(),
-        if (error != null) InlineBanner.error(error!),
+        if (error != null) InlineBanner.error(error!, alReintentar: recargar),
         if (p != null) ...[
           RejillaAdaptable(
             anchoMinimo: 250,

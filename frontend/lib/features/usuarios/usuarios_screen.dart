@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/network/api_client.dart';
 import '../../core/network/api_exception.dart';
 import '../../core/security/permisos.dart';
 import '../../core/theme/app_theme.dart';
@@ -56,6 +57,8 @@ class _UsuariosScreenState extends State<UsuariosScreen> {
       // La app vuelve al login.
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
+    } on TypeError {
+      if (mounted) setState(() => _error = ApiClient.respuestaInesperada);
     } finally {
       if (mounted) setState(() => _cargando = false);
     }
@@ -215,7 +218,7 @@ class _UsuariosScreenState extends State<UsuariosScreen> {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           if (_cargando) const LinearProgressIndicator(),
-                          if (_error != null) Padding(padding: const EdgeInsets.all(16), child: InlineBanner.error(_error!)),
+                          if (_error != null) Padding(padding: const EdgeInsets.all(16), child: InlineBanner.error(_error!, alReintentar: _cargar)),
                           if (!_cargando && _error == null && visibles.isEmpty)
                             const EmptyState(icono: Icons.group_off_outlined, titulo: 'No hay usuarios que mostrar'),
                           LayoutBuilder(

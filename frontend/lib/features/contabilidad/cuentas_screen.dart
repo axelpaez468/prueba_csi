@@ -50,6 +50,7 @@ class _CuentasScreenState extends State<CuentasScreen> with CargaDatos<CuentasSc
         TablaResponsiva(
           cargando: cargando,
           error: error,
+          alReintentar: recargar,
           filas: lista.length,
           alTocar: (i) => _mayor(lista[i]),
           columnas: const [
@@ -230,6 +231,7 @@ class _LibroMayorScreenState extends State<LibroMayorScreen> with CargaDatos<Lib
         TablaResponsiva(
           cargando: cargando,
           error: error,
+          alReintentar: recargar,
           filas: movs.length,
           vacio: const EmptyState(icono: Icons.swap_horiz, titulo: 'Sin movimientos en este rango'),
           columnas: const [

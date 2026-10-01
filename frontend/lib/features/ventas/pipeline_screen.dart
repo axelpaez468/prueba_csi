@@ -163,7 +163,7 @@ class _PipelineScreenState extends State<PipelineScreen> with CargaDatos<Pipelin
       ],
       children: [
         if (cargando && datos == null) const LinearProgressIndicator(),
-        if (error != null) InlineBanner.error(error!),
+        if (error != null) InlineBanner.error(error!, alReintentar: recargar),
         if (datos != null && kanban)
           SizedBox(
             key: _claveTablero,

@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../../core/network/api_client.dart';
 import '../../core/network/api_exception.dart';
 import '../../core/security/session.dart';
 import '../../core/security/token_storage.dart';
@@ -143,6 +144,8 @@ class SessionController extends ChangeNotifier {
     } on ApiException catch (e) {
       _error = e.message;
       alFallar?.call(e);
+    } on TypeError {
+      _error = ApiClient.respuestaInesperada;
     } finally {
       _procesando = false;
       notifyListeners();

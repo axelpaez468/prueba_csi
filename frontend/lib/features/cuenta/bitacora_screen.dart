@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/network/api_client.dart';
 import '../../core/network/api_exception.dart';
 import '../../core/widgets/app_shell.dart';
 import '../../core/widgets/erp_widgets.dart';
@@ -49,6 +50,8 @@ class _BitacoraScreenState extends State<BitacoraScreen> {
       // La app vuelve al login.
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
+    } on TypeError {
+      if (mounted) setState(() => _error = ApiClient.respuestaInesperada);
     } finally {
       if (mounted) setState(() => _cargando = false);
     }
@@ -110,7 +113,7 @@ class _BitacoraScreenState extends State<BitacoraScreen> {
                             ),
                             const Divider(),
                             if (_cargando) const LinearProgressIndicator(),
-                            if (_error != null) Padding(padding: const EdgeInsets.all(12), child: InlineBanner.error(_error!)),
+                            if (_error != null) Padding(padding: const EdgeInsets.all(12), child: InlineBanner.error(_error!, alReintentar: _cargar)),
                             if (!_cargando && visibles.isEmpty && _error == null)
                               const Padding(padding: EdgeInsets.all(24), child: Center(child: Text('Sin eventos.'))),
                             for (final r in _paginacion.recortar(visibles)) FilaAcceso(acceso: r, mostrarEmail: true),
