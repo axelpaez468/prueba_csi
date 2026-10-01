@@ -48,6 +48,9 @@ services:
       Cors__AllowedOrigins: ${FRONTEND_ORIGIN:-http://localhost:8080}
       # Enlaces de los correos (recuperación de contraseña).
       Frontend__UrlPublica: ${FRONTEND_ORIGIN:-http://localhost:8080}
+      # Datos de demostración (productos, clientes y meses de ventas). Solo la primera vez; false para no generarlos.
+      Demo__Generar: ${DEMO_GENERAR:-true}
+      Demo__Dias: ${DEMO_DIAS:-120}
       # Por defecto Mailpit (bandeja local). Para enviar correos reales, defina CORREO_* en .env (ver .env.example).
       Correo__Host: ${CORREO_HOST:-mailpit}
       Correo__Puerto: ${CORREO_PUERTO:-1025}

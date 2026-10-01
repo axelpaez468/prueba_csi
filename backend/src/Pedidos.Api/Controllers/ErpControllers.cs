@@ -264,6 +264,53 @@ public class PanelController : ControllerBase
     public Task<PanelResponse> Resumen(CancellationToken ct) => _panel.ResumenAsync(ct);
 }
 
+/// <summary>Departamentos y municipios de Guatemala para los selectores de la entrega.</summary>
+[ApiController]
+[Route("api/geografia")]
+[Authorize]
+public class GeografiaController : ControllerBase
+{
+    [HttpGet]
+    public IReadOnlyList<DepartamentoDto> Departamentos()
+    {
+        Response.Headers.CacheControl = "private, max-age=86400"; // no cambia: se puede guardar un día
+        return Geografia.Departamentos;
+    }
+}
+
+/// <summary>Pipeline de ventas: tablero por etapas y avance de etapa.</summary>
+[ApiController]
+[Route("api/pipeline")]
+[Authorize(Roles = Roles.Pipeline)]
+public class PipelineController : ControllerBase
+{
+    private readonly PipelineService _pipeline;
+
+    public PipelineController(PipelineService pipeline) => _pipeline = pipeline;
+
+    private string Rol => User.FindFirst(JwtClaims.Role)?.Value ?? "";
+
+    [HttpGet]
+    public Task<List<TarjetaPipelineResponse>> Tablero(CancellationToken ct) =>
+        _pipeline.TableroAsync(User.GetUsuarioId(), Rol, ct);
+
+    /// <summary>Detalle de la venta con su historial de etapas (bodega también la ve, para despachar).</summary>
+    [HttpGet("{id:int}")]
+    [ProducesResponseType<PedidoResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ErrorResponse>(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Obtener(int id, [FromServices] Pedidos.Api.Services.PedidoService pedidos, CancellationToken ct) =>
+        await pedidos.ObtenerAsync(id, User.GetUsuarioId(), PipelineService.VeTodas(Rol), ct) is { } p
+            ? Ok(p)
+            : NotFound(new ErrorResponse("Venta no encontrada."));
+
+    [HttpPost("{id:int}/avanzar")]
+    public async Task<MensajeResponse> Avanzar(int id, AvanzarEstadoRequest request, CancellationToken ct)
+    {
+        var nuevo = await _pipeline.AvanzarAsync(id, User.GetUsuarioId(), Rol, request.Nota, ct);
+        return new MensajeResponse($"La venta A-{id} pasó a \"{EstadosVenta.Nombre(nuevo)}\".");
+    }
+}
+
 /// <summary>Reportes de ventas. El vendedor ve solo sus ventas; ADMIN y CONTADOR, todas.</summary>
 [ApiController]
 [Route("api/reportes")]

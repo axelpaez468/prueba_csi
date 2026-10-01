@@ -327,6 +327,47 @@ IF COL_LENGTH(N'dbo.PedidoDetalle', N'CostoUnitario') IS NULL
     ALTER TABLE dbo.PedidoDetalle ADD CostoUnitario DECIMAL(18,4) NOT NULL CONSTRAINT DF_PedidoDetalle_CostoUnitario DEFAULT (0);
 GO
 
+-- Entrega (departamento y municipio de Guatemala) y etapa del pipeline de la venta.
+IF COL_LENGTH(N'dbo.Pedidos', N'DireccionEntrega') IS NULL
+    ALTER TABLE dbo.Pedidos ADD DireccionEntrega NVARCHAR(200) NULL;
+IF COL_LENGTH(N'dbo.Pedidos', N'Departamento') IS NULL
+    ALTER TABLE dbo.Pedidos ADD Departamento NVARCHAR(40) NULL;
+IF COL_LENGTH(N'dbo.Pedidos', N'Municipio') IS NULL
+    ALTER TABLE dbo.Pedidos ADD Municipio NVARCHAR(60) NULL;
+IF COL_LENGTH(N'dbo.Pedidos', N'Estado') IS NULL
+BEGIN
+    ALTER TABLE dbo.Pedidos ADD Estado NVARCHAR(12) NOT NULL CONSTRAINT DF_Pedidos_Estado DEFAULT (N'NUEVO')
+        CONSTRAINT CK_Pedidos_Estado CHECK (Estado IN (N'NUEVO', N'REVISADO', N'AUTORIZADO', N'DESPACHADO', N'EN_CAMINO', N'ENTREGADO'));
+    ALTER TABLE dbo.Pedidos ADD EstadoDesde DATETIME2 NOT NULL CONSTRAINT DF_Pedidos_EstadoDesde DEFAULT (SYSUTCDATETIME());
+    -- Las ventas anteriores al pipeline ya se entregaron (son de mostrador). Dinámico: la columna recién se creó.
+    EXEC (N'UPDATE dbo.Pedidos SET Estado = N''ENTREGADO'', EstadoDesde = Fecha;');
+END
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_Pedidos_Estado')
+    CREATE INDEX IX_Pedidos_Estado ON dbo.Pedidos(Estado);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_Pedidos_Departamento')
+    CREATE INDEX IX_Pedidos_Departamento ON dbo.Pedidos(Departamento);
+GO
+
+IF OBJECT_ID(N'dbo.PedidoHistorial', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.PedidoHistorial (
+        Id        BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_PedidoHistorial PRIMARY KEY,
+        PedidoId  INT           NOT NULL CONSTRAINT FK_PedidoHistorial_Pedidos REFERENCES dbo.Pedidos(Id) ON DELETE CASCADE,
+        Estado    NVARCHAR(12)  NOT NULL,
+        Fecha     DATETIME2     NOT NULL,
+        UsuarioId INT           NULL CONSTRAINT FK_PedidoHistorial_Usuarios REFERENCES dbo.Usuarios(Id),
+        Nota      NVARCHAR(200) NULL,
+        INDEX IX_PedidoHistorial_Pedido (PedidoId, Id)
+    );
+    -- Historial mínimo de las ventas existentes: registradas y entregadas el mismo día.
+    INSERT INTO dbo.PedidoHistorial (PedidoId, Estado, Fecha, UsuarioId, Nota)
+    SELECT Id, N'NUEVO', Fecha, UsuarioId, N'Venta registrada' FROM dbo.Pedidos;
+    INSERT INTO dbo.PedidoHistorial (PedidoId, Estado, Fecha, UsuarioId, Nota)
+    SELECT Id, N'ENTREGADO', Fecha, NULL, N'Venta de mostrador (anterior al pipeline)' FROM dbo.Pedidos WHERE Estado = N'ENTREGADO';
+END
+GO
+
 -- Pedidos anteriores al ERP: a consumidor final, con el IVA separado del total.
 UPDATE dbo.Pedidos SET ClienteId = (SELECT Id FROM dbo.Clientes WHERE Nit = N'CF') WHERE ClienteId IS NULL;
 UPDATE dbo.Pedidos SET BaseImponible = ROUND(Total / 1.12, 2), Iva = Total - ROUND(Total / 1.12, 2)

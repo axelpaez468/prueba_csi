@@ -15,6 +15,9 @@ public class ReporteVentasService
     /// <summary>Tope de facturas por consulta: un rango de un año de una pyme cabe de sobra.</summary>
     public const int FacturasMax = 50_000;
 
+    /// <summary>Ventas sin datos de entrega (de mostrador o anteriores a este campo).</summary>
+    public const string SinDepartamento = "Sin departamento";
+
     private readonly AppDbContext _db;
 
     public ReporteVentasService(AppDbContext db) => _db = db;
@@ -22,7 +25,7 @@ public class ReporteVentasService
     private sealed record Linea(int ProductoId, int Cantidad, decimal Subtotal, decimal CostoUnitario);
 
     private sealed record Venta(int Id, int UsuarioId, int ClienteId, DateTime Fecha, string FormaPago, decimal Total,
-        decimal BaseImponible, decimal Iva, decimal Costo, List<Linea> Lineas);
+        decimal BaseImponible, decimal Iva, decimal Costo, string? Departamento, string Estado, List<Linea> Lineas);
 
     public async Task<ReporteVentasResponse> GenerarAsync(DateOnly desde, DateOnly hasta, int usuarioId, bool veTodas,
         CancellationToken ct)
@@ -98,8 +101,25 @@ public class ReporteVentasService
             })
             .ToList();
 
+        var iso = Geografia.Departamentos.ToDictionary(d => d.Nombre, d => d.Iso);
+        var porDepartamento = ventas.GroupBy(v => v.Departamento ?? SinDepartamento).Select(g =>
+        {
+            var top = g.SelectMany(v => v.Lineas).GroupBy(l => l.ProductoId)
+                .Select(x => (Id: x.Key, Unidades: x.Sum(l => l.Cantidad)))
+                .OrderByDescending(x => x.Unidades).FirstOrDefault();
+            return new VentaPorDepartamentoResponse(g.Key, iso.GetValueOrDefault(g.Key), g.Count(),
+                g.Sum(v => v.Lineas.Sum(l => l.Cantidad)), g.Sum(v => v.Total), Parte(g.Sum(v => v.Total)),
+                top.Id == 0 ? null : productos.GetValueOrDefault(top.Id)?.Nombre, top.Unidades);
+        }).OrderByDescending(x => x.Total).ToList();
+
+        var porEstado = EstadosVenta.Orden.Select(e =>
+        {
+            var delEstado = ventas.Where(v => v.Estado == e).ToList();
+            return new VentaPorEstadoResponse(e, EstadosVenta.Nombre(e), delEstado.Count, delEstado.Sum(v => v.Total));
+        }).ToList();
+
         return new ReporteVentasResponse(desde, hasta, Resumir(ventas), Resumir(anteriores), porDia, porProducto,
-            porCategoria, porVendedor, porCliente, porFormaPago);
+            porCategoria, porVendedor, porCliente, porFormaPago, porDepartamento, porEstado);
     }
 
     private async Task<List<Venta>> CargarAsync(DateTime inicio, DateTime fin, int usuarioId, bool veTodas, CancellationToken ct)
@@ -111,12 +131,13 @@ public class ReporteVentasService
             .Select(p => new
             {
                 p.Id, p.UsuarioId, p.ClienteId, p.Fecha, p.FormaPago, p.Total, p.BaseImponible, p.Iva, p.Costo,
+                p.Departamento, p.Estado,
                 Lineas = p.Detalles.Select(d => new Linea(d.ProductoId, d.Cantidad, d.Subtotal, d.CostoUnitario)).ToList()
             })
             .AsSplitQuery()
             .ToListAsync(ct);
         return filas.Select(f => new Venta(f.Id, f.UsuarioId, f.ClienteId, f.Fecha, f.FormaPago, f.Total, f.BaseImponible,
-            f.Iva, f.Costo, f.Lineas)).ToList();
+            f.Iva, f.Costo, f.Departamento, f.Estado, f.Lineas)).ToList();
     }
 
     private static ResumenVentasResponse Resumir(List<Venta> ventas)

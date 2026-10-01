@@ -36,6 +36,19 @@ public static class Roles
 
     public const string Contabilidad = Contador + "," + Admin;
 
+    /// <summary>Tablero de etapas de las ventas: cada rol mueve las etapas que le tocan.</summary>
+    public const string Pipeline = Vendedor + "," + Admin + "," + Contador + "," + Bodega;
+
+    public static string Nombre(string rol) => rol switch
+    {
+        Vendedor => "vendedor",
+        Admin => "administrador",
+        Bodega => "bodega",
+        Compras => "compras",
+        Contador => "contador",
+        _ => rol
+    };
+
     /// <summary>Panel de indicadores: todos menos el vendedor, que trabaja desde el catálogo.</summary>
     public const string Panel = Admin + "," + Bodega + "," + Compras + "," + Contador;
 }

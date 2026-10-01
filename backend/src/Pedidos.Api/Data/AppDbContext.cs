@@ -15,6 +15,7 @@ public class AppDbContext : DbContext
     public DbSet<ProductoImagen> ProductoImagenes => Set<ProductoImagen>();
     public DbSet<Pedido> Pedidos => Set<Pedido>();
     public DbSet<PedidoDetalle> PedidoDetalles => Set<PedidoDetalle>();
+    public DbSet<PedidoHistorial> PedidoHistorial => Set<PedidoHistorial>();
     public DbSet<CodigoRespaldo> CodigosRespaldo => Set<CodigoRespaldo>();
     public DbSet<TokenRecuperacion> TokensRecuperacion => Set<TokenRecuperacion>();
     public DbSet<DispositivoConfiable> DispositivosConfiables => Set<DispositivoConfiable>();
@@ -147,6 +148,13 @@ public class AppDbContext : DbContext
             e.Property(p => p.BaseImponible).HasPrecision(18, 2);
             e.Property(p => p.Iva).HasPrecision(18, 2);
             e.Property(p => p.Costo).HasPrecision(18, 2);
+            e.Property(p => p.DireccionEntrega).HasMaxLength(200);
+            e.Property(p => p.Departamento).HasMaxLength(40);
+            e.Property(p => p.Municipio).HasMaxLength(60);
+            e.Property(p => p.Estado).HasMaxLength(12).IsRequired();
+            e.Property(p => p.EstadoDesde).HasConversion(v => v, v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
+            e.HasIndex(p => p.Estado);
+            e.HasIndex(p => p.Departamento);
             e.HasIndex(p => p.UsuarioId);
             e.HasIndex(p => p.Fecha);
             e.HasIndex(p => p.ClienteId);
@@ -167,6 +175,17 @@ public class AppDbContext : DbContext
 
     private static void ConfigurarErp(ModelBuilder model)
     {
+        model.Entity<PedidoHistorial>(e =>
+        {
+            e.ToTable("PedidoHistorial");
+            e.Property(h => h.Estado).HasMaxLength(12).IsRequired();
+            e.Property(h => h.Nota).HasMaxLength(200);
+            e.Property(h => h.Fecha).HasConversion(v => v, v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
+            e.HasOne<Pedido>().WithMany().HasForeignKey(h => h.PedidoId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<Usuario>().WithMany().HasForeignKey(h => h.UsuarioId).OnDelete(DeleteBehavior.Restrict);
+            e.HasIndex(h => new { h.PedidoId, h.Id });
+        });
+
         model.Entity<ProductoImagen>(e =>
         {
             e.ToTable("ProductoImagenes");

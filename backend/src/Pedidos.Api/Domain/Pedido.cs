@@ -33,6 +33,21 @@ public class Pedido
     /// <summary>Número de autorización simulado (en FEL lo asigna el certificador).</summary>
     public Guid Autorizacion { get; set; }
 
+    // ---------- Entrega ----------
+
+    public string? DireccionEntrega { get; set; }
+
+    /// <summary>Nombre oficial del departamento de Guatemala (ver <c>Geografia</c>).</summary>
+    public string? Departamento { get; set; }
+    public string? Municipio { get; set; }
+
+    // ---------- Pipeline ----------
+
+    public string Estado { get; set; } = EstadosVenta.Nuevo;
+
+    /// <summary>Desde cuándo está en la etapa actual (para ver qué se está atrasando).</summary>
+    public DateTime EstadoDesde { get; set; }
+
     public Cliente? Cliente { get; set; }
     public List<PedidoDetalle> Detalles { get; set; } = new();
 }

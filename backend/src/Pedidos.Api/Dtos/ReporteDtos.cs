@@ -27,6 +27,13 @@ public record VentaPorClienteResponse(int ClienteId, string Nit, string Cliente,
 
 public record VentaPorFormaPagoResponse(string FormaPago, int Facturas, decimal Total, decimal Participacion);
 
+/// <summary>Ventas por departamento de entrega, con el producto más vendido ahí (para el mapa).</summary>
+public record VentaPorDepartamentoResponse(
+    string Departamento, string? Iso, int Facturas, int Unidades, decimal Total, decimal Participacion,
+    string? ProductoTop, int UnidadesProductoTop);
+
+public record VentaPorEstadoResponse(string Estado, string Nombre, int Facturas, decimal Total);
+
 public record ReporteVentasResponse(
     DateOnly Desde,
     DateOnly Hasta,
@@ -38,4 +45,6 @@ public record ReporteVentasResponse(
     List<VentaPorCategoriaResponse> PorCategoria,
     List<VentaPorVendedorResponse> PorVendedor,
     List<VentaPorClienteResponse> PorCliente,
-    List<VentaPorFormaPagoResponse> PorFormaPago);
+    List<VentaPorFormaPagoResponse> PorFormaPago,
+    List<VentaPorDepartamentoResponse> PorDepartamento,
+    List<VentaPorEstadoResponse> PorEstado);
