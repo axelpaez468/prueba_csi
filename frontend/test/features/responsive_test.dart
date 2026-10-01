@@ -305,7 +305,8 @@ ApiClient _api() => ApiClient(
 
 enum _Sesion { anonima, autenticada, segundoFactor }
 
-Future<void> _montar(WidgetTester tester, Size tamano, Widget pantalla, {_Sesion sesion = _Sesion.autenticada}) async {
+Future<void> _montar(WidgetTester tester, Size tamano, Widget pantalla,
+    {_Sesion sesion = _Sesion.autenticada, String rol = 'ADMIN'}) async {
   tester.view
     ..physicalSize = tamano
     ..devicePixelRatio = 1;
@@ -316,7 +317,7 @@ Future<void> _montar(WidgetTester tester, Size tamano, Widget pantalla, {_Sesion
   final session = SessionController(
     auth,
     StorageEnMemoria(sesion == _Sesion.autenticada
-        ? Session(token: 't', username: 'vendedor', email: 'vendedor@pedidos.local', rol: 'ADMIN', expiraEn: DateTime.utc(2100))
+        ? Session(token: 't', username: 'vendedor', email: 'vendedor@pedidos.local', rol: rol, expiraEn: DateTime.utc(2100))
         : null),
   );
   await session.restore();
@@ -469,6 +470,19 @@ void main() {
           await tester.pumpAndSettle();
           expect(find.text('VENTAS'), findsOneWidget);
           expect(find.text('Reportes de ventas'), findsWidgets);
+        }
+      });
+
+      testWidgets('barra de navegación del vendedor: módulos directos', (tester) async {
+        await _montar(tester, tamano, const ClientesScreen(), rol: 'VENDEDOR');
+        if (tamano.width >= 1000) {
+          // Pocos módulos: van uno al lado del otro, sin submenú de área.
+          for (final descripcion in ['Productos para vender', 'Facturas emitidas', 'Por día, producto, vendedor y cliente']) {
+            expect(find.byTooltip(descripcion), findsOneWidget);
+          }
+          expect(find.byType(PopupMenuButton<Modulo>), findsNothing);
+        } else {
+          expect(find.byTooltip('Menú'), findsOneWidget);
         }
       });
 

@@ -24,6 +24,13 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
   /// Desde este ancho las áreas caben en la barra.
   static const anchoNavegacion = 1240.0;
 
+  /// Con hasta esta cantidad de módulos (vendedor, bodega, compras) cada módulo va directo en la barra,
+  /// uno al lado del otro; con más (contador, administrador) se agrupan por área con submenú.
+  static const modulosEnBarraMax = 6;
+
+  /// Ancho desde el que caben los módulos directos (son pocos).
+  static const anchoNavegacionPlana = 1000.0;
+
   @override
   Size get preferredSize => const Size.fromHeight(alto);
 
@@ -31,9 +38,11 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
   Widget build(BuildContext context) {
     final ancho = MediaQuery.sizeOf(context).width;
     final compacto = ancho < 640;
-    final enBarra = ancho >= anchoNavegacion;
     final session = context.watch<SessionController>().session;
     final areas = session == null ? const <(Grupo, List<Modulo>)>[] : gruposDe(session);
+    final todos = session == null ? const <Modulo>[] : modulosDe(session);
+    final plana = todos.length <= modulosEnBarraMax;
+    final enBarra = ancho >= (plana ? anchoNavegacionPlana : anchoNavegacion);
     final vende = session?.puedeVender ?? false;
 
     return Material(
@@ -76,7 +85,10 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
                       child: SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: Row(children: [
-                          for (final (grupo, lista) in areas) _ItemArea(grupo: grupo, modulos: lista),
+                          if (plana)
+                            for (final m in todos) _ItemModulo(modulo: m)
+                          else
+                            for (final (grupo, lista) in areas) _ItemArea(grupo: grupo, modulos: lista),
                         ]),
                       ),
                     )
@@ -114,6 +126,59 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
   }
 }
 
+/// Opción de la barra: ícono y texto, resaltada cuando es la pantalla abierta.
+class _BotonBarra extends StatelessWidget {
+  const _BotonBarra({required this.icono, required this.texto, required this.activo, this.conFlecha = false});
+
+  final IconData icono;
+  final String texto;
+  final bool activo;
+  final bool conFlecha;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = activo ? Colors.white : AppColors.navbarTexto;
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      height: AppTopBar.alto,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      decoration: BoxDecoration(
+        color: activo ? Colors.white.withValues(alpha: 0.08) : null,
+        border: Border(bottom: BorderSide(color: activo ? const Color(0xFF7FA2FF) : Colors.transparent, width: 3)),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icono, size: 18, color: color),
+        const SizedBox(width: 8),
+        Text(texto, style: TextStyle(color: color, fontWeight: activo ? FontWeight.w700 : FontWeight.w500, fontSize: 14)),
+        if (conFlecha) ...[
+          const SizedBox(width: 2),
+          Icon(Icons.expand_more, size: 16, color: color),
+        ],
+      ]),
+    );
+  }
+}
+
+/// Módulo directo en la barra (roles con pocos módulos).
+class _ItemModulo extends StatelessWidget {
+  const _ItemModulo({required this.modulo});
+
+  final Modulo modulo;
+
+  @override
+  Widget build(BuildContext context) {
+    final activo = moduloActual(context) == modulo;
+    return Tooltip(
+      message: modulo.descripcion,
+      child: InkWell(
+        onTap: () => abrirModulo(context, modulo),
+        // El panel de indicadores se muestra como "Inicio".
+        child: _BotonBarra(icono: modulo.icono, texto: modulo.grupo == 'Inicio' ? 'Inicio' : modulo.titulo, activo: activo),
+      ),
+    );
+  }
+}
+
 /// Área en la barra (Ventas, Inventario...). Con un solo módulo abre directo; si no, despliega su submenú.
 class _ItemArea extends StatelessWidget {
   const _ItemArea({required this.grupo, required this.modulos});
@@ -124,28 +189,7 @@ class _ItemArea extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final activo = moduloActual(context)?.grupo == grupo.nombre;
-    final contenido = AnimatedContainer(
-      duration: const Duration(milliseconds: 180),
-      height: AppTopBar.alto,
-      padding: const EdgeInsets.symmetric(horizontal: 14),
-      decoration: BoxDecoration(
-        color: activo ? Colors.white.withValues(alpha: 0.08) : null,
-        border: Border(bottom: BorderSide(color: activo ? const Color(0xFF7FA2FF) : Colors.transparent, width: 3)),
-      ),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(grupo.icono, size: 18, color: activo ? Colors.white : AppColors.navbarTexto),
-        const SizedBox(width: 8),
-        Text(grupo.nombre,
-            style: TextStyle(
-                color: activo ? Colors.white : AppColors.navbarTexto,
-                fontWeight: activo ? FontWeight.w700 : FontWeight.w500,
-                fontSize: 14)),
-        if (modulos.length > 1) ...[
-          const SizedBox(width: 2),
-          Icon(Icons.expand_more, size: 16, color: activo ? Colors.white : AppColors.navbarTexto),
-        ],
-      ]),
-    );
+    final contenido = _BotonBarra(icono: grupo.icono, texto: grupo.nombre, activo: activo, conFlecha: modulos.length > 1);
 
     if (modulos.length == 1) {
       return InkWell(onTap: () => abrirModulo(context, modulos.first), child: contenido);
