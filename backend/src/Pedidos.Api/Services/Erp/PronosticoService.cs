@@ -100,7 +100,8 @@ public class PronosticoService
     public async Task ActualizarProbabilidadesAsync(ActualizarProbabilidadesRequest request, int usuarioId, CancellationToken ct)
     {
         var nuevas = request.Etapas ?? new();
-        if (nuevas.Count != EstadosVenta.Orden.Length || nuevas.Select(e => e.Estado).Distinct().Count() != nuevas.Count ||
+        if (nuevas.Any(e => e is null || e.Estado is null) ||
+            nuevas.Count != EstadosVenta.Orden.Length || nuevas.Select(e => e.Estado).Distinct().Count() != nuevas.Count ||
             nuevas.Any(e => !EstadosVenta.Orden.Contains(e.Estado)))
             throw new BusinessRuleException("Envía la probabilidad de cada una de las seis etapas, una vez cada una.");
 

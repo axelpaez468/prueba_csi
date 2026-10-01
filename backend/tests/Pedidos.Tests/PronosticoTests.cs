@@ -92,6 +92,15 @@ public class PronosticoTests : ErpTestBase
     }
 
     [Fact]
+    public async Task CambiarProbabilidades_ConEtapasNulas_SeRechaza_SinErrorInterno()
+    {
+        await Assert.ThrowsAsync<BusinessRuleException>(() => Pronostico().ActualizarProbabilidadesAsync(
+            new ActualizarProbabilidadesRequest(Enumerable.Repeat<ProbabilidadEtapaRequest>(null!, 6).ToList()), TestDb.AdminId, default));
+        await Assert.ThrowsAsync<BusinessRuleException>(() => Pronostico().ActualizarProbabilidadesAsync(
+            new ActualizarProbabilidadesRequest(null!), TestDb.AdminId, default));
+    }
+
+    [Fact]
     public async Task Vendedor_SoloVeSuPronostico()
     {
         await Vender(1, 1);

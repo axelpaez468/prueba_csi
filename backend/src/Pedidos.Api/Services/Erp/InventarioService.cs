@@ -120,6 +120,7 @@ public partial class InventarioService
         var resultado = new List<Especificacion>();
         foreach (var e in lista ?? new())
         {
+            if (e is null) continue; // [null] en el JSON: una fila vacía, como las que se ignoran abajo
             var nombre = Contacto.Limpiar(e.Nombre);
             var valor = Contacto.Limpiar(e.Valor);
             if (nombre is null && valor is null) continue;

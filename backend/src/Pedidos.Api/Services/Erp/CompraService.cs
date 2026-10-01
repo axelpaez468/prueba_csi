@@ -38,6 +38,8 @@ public class CompraService
             throw new BusinessRuleException("La orden debe tener al menos un producto.");
         if (lineas.Count > LineasPorOrdenMax)
             throw new BusinessRuleException($"Una orden admite como máximo {LineasPorOrdenMax} productos distintos.");
+        if (lineas.Any(l => l is null))
+            throw new BusinessRuleException("Hay una línea de la orden vacía.");
         var duplicado = lineas.GroupBy(l => l.ProductoId).FirstOrDefault(g => g.Count() > 1);
         if (duplicado is not null)
             throw new BusinessRuleException($"El producto {duplicado.Key} aparece más de una vez. Agrupa las cantidades en una línea.");

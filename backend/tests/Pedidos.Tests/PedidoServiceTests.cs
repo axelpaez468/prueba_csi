@@ -119,6 +119,14 @@ public class PedidoServiceTests : IDisposable
         await Assert.ThrowsAsync<BusinessRuleException>(() => Crear(TestDb.VendedorId));
     }
 
+    [Fact]
+    public async Task Crear_ConUnaLineaNula_Falla_SinErrorInterno()
+    {
+        // JSON {"lineas":[null]}: antes terminaba en NullReferenceException (500).
+        await Assert.ThrowsAsync<BusinessRuleException>(() => Crear(TestDb.VendedorId, new LineaPedidoRequest(1, 1), null!));
+        Assert.Equal(10, _testDb.StockDe(1));
+    }
+
     // ---------- Límites de tamaño (protección contra abuso de recursos) ----------
 
     [Fact]

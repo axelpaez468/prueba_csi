@@ -452,6 +452,14 @@ public class ComprasTests : ErpTestBase
         await Assert.ThrowsAsync<BusinessRuleException>(() => Compras().CrearAsync(
             new CrearOrdenRequest(proveedor.Id, new() { new LineaOrdenRequest(1, cantidad, (decimal)costo) }, null), TestDb.AdminId, default));
     }
+
+    [Fact]
+    public async Task CrearOrden_ConUnaLineaNula_Falla_SinErrorInterno()
+    {
+        var proveedor = await ProveedorDePrueba();
+        await Assert.ThrowsAsync<BusinessRuleException>(() => Compras().CrearAsync(
+            new CrearOrdenRequest(proveedor.Id, new() { null! }, null), TestDb.AdminId, default));
+    }
 }
 
 public class ContabilidadTests : ErpTestBase
@@ -487,6 +495,11 @@ public class ContabilidadTests : ErpTestBase
         await Assert.ThrowsAsync<BusinessRuleException>(() => Manual(("6102", 100m, 100m), ("1102", 0, 0)));
         await Assert.ThrowsAsync<BusinessRuleException>(() => Manual(("6102", 100m, 0)));
     }
+
+    [Fact]
+    public async Task PartidaManual_ConLineasNulas_SeRechaza_SinErrorInterno() =>
+        await Assert.ThrowsAsync<BusinessRuleException>(() => Contabilidad().CrearManualAsync(
+            new CrearPartidaRequest(null, "Partida con nulos", new() { null!, null! }), TestDb.AdminId, default));
 
     [Fact]
     public async Task PartidaManual_ConFechaFutura_SeRechaza()

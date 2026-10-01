@@ -203,6 +203,9 @@ public class PedidoService
 
         if (lineas.Count > InputLimits.LineasPorPedidoMax)
             throw new BusinessRuleException($"Un pedido admite como máximo {InputLimits.LineasPorPedidoMax} productos distintos.");
+        // JSON como {"lineas":[null]}: sin esto, el resto de validaciones fallaría con un error 500.
+        if (lineas.Any(l => l is null))
+            throw new BusinessRuleException("Hay una línea del pedido vacía.");
 
         var cantidadExcesiva = lineas.FirstOrDefault(l => l.Cantidad > InputLimits.CantidadPorLineaMax);
         if (cantidadExcesiva is not null)

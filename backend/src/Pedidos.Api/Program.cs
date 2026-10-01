@@ -82,7 +82,8 @@ builder.Services.AddScoped<Pedidos.Api.Services.Usuarios.UsuarioService>();
 builder.Services.AddScoped<PoliticaPassword>();
 builder.Services.AddHttpClient<IVerificadorPasswordFiltrada, HibpVerificador>(c =>
 {
-    c.BaseAddress = new Uri("https://api.pwnedpasswords.com/");
+    // Configurable solo para las pruebas de integración (un servidor local simulado); en producción, el oficial.
+    c.BaseAddress = new Uri(config["Seguridad:PwnedPasswordsUrl"] ?? "https://api.pwnedpasswords.com/");
     c.Timeout = TimeSpan.FromSeconds(3);
     c.DefaultRequestHeaders.UserAgent.ParseAdd("PedidosPruebaTecnica/1.0");
 });

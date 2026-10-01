@@ -75,6 +75,8 @@ public partial class ContabilidadService
             throw new BusinessRuleException("La partida debe tener al menos dos líneas (un cargo y un abono).");
         if (lineas.Count > LineasPorPartidaMax)
             throw new BusinessRuleException($"Una partida admite como máximo {LineasPorPartidaMax} líneas.");
+        if (lineas.Any(l => l is null))
+            throw new BusinessRuleException("Hay una línea de la partida vacía.");
         foreach (var (l, i) in lineas.Select((l, i) => (l, i + 1)))
         {
             if (l.Debe < 0 || l.Haber < 0 || (l.Debe > 0) == (l.Haber > 0))
