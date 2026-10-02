@@ -168,7 +168,7 @@ Todos los errores tienen el mismo formato: `{ "error": "mensaje legible" }`.
 ### Pruebas automatizadas
 
 ```bash
-cd backend && dotnet test      # 181 pruebas; con SQL Server (ver abajo) se suman las HTTP: 361 en total
+cd backend && dotnet test      # 181 pruebas; con SQL Server (ver abajo) se suman las HTTP: 365 en total
 cd frontend && flutter test    # 486 pruebas
 ```
 
