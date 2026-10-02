@@ -579,17 +579,19 @@ GO
 
 -- Fotos de los productos semilla: 5 por producto, desde db/init/imagenes (montado en /db; créditos en CREDITOS.md).
 -- Solo a los productos que todavía no tienen ninguna foto.
-DECLARE @codigo NVARCHAR(20), @n INT, @sql NVARCHAR(MAX);
+-- Fuera de Docker (p. ej. SQL Server local en Windows) la ruta /db/init/imagenes no existe: se avisa y el resto del
+-- script continúa (con sqlcmd -b, un error aquí detendría la inicialización a la mitad). Las fotos se suben desde la app.
+DECLARE @codigo NVARCHAR(20), @n INT, @sql NVARCHAR(MAX), @sinFotos BIT = 0;
 DECLARE semilla CURSOR LOCAL FAST_FORWARD FOR
     SELECT p.Codigo FROM dbo.Productos p
      WHERE p.Codigo IN (N'P-001', N'P-002', N'P-003', N'P-004', N'P-005')
        AND NOT EXISTS (SELECT 1 FROM dbo.ProductoImagenes i WHERE i.ProductoId = p.Id);
 OPEN semilla;
 FETCH NEXT FROM semilla INTO @codigo;
-WHILE @@FETCH_STATUS = 0
+WHILE @@FETCH_STATUS = 0 AND @sinFotos = 0
 BEGIN
     SET @n = 1;
-    WHILE @n <= 5
+    WHILE @n <= 5 AND @sinFotos = 0
     BEGIN
         -- OPENROWSET(BULK) exige la ruta literal: se arma con dynamic SQL (el código viene de la tabla, no del usuario).
         SET @sql = N'INSERT INTO dbo.ProductoImagenes (ProductoId, Orden, ContentType, Datos, Tamano)
@@ -597,7 +599,14 @@ BEGIN
               FROM dbo.Productos p
              CROSS APPLY OPENROWSET(BULK ''/db/init/imagenes/' + @codigo + N'-' + CAST(@n AS NVARCHAR(2)) + N'.jpg'', SINGLE_BLOB) AS f
              WHERE p.Codigo = N''' + @codigo + N''';';
-        EXEC sys.sp_executesql @sql;
+        BEGIN TRY
+            EXEC sys.sp_executesql @sql;
+        END TRY
+        BEGIN CATCH
+            SET @sinFotos = 1;
+            PRINT N'Aviso: no se encontraron las fotos semilla en /db/init/imagenes (¿fuera de Docker?). '
+                + N'Los productos quedan sin foto; se pueden subir desde Inventario > Productos > Fotos.';
+        END CATCH
         SET @n += 1;
     END
     FETCH NEXT FROM semilla INTO @codigo;

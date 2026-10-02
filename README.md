@@ -46,6 +46,8 @@ docker compose up --build
 sqlcmd -S ".\SQLEXPRESS" -E -b -I -f 65001 -i db/init/init.sql -v DB_NAME=PedidosDb APP_DB_USER=pedidos_app APP_DB_PASSWORD="Cambiar-App-2026!"
 ```
 
+El script crea el esquema y los **datos semilla**: los 5 usuarios de la sección 2, 5 productos, el consumidor final y 2 clientes, 2 proveedores, el catálogo de 16 cuentas, las probabilidades del pipeline, el kardex inicial y la partida de apertura (cuadrada). Fuera de Docker las **fotos** semilla no se cargan, porque su ruta es la del contenedor: el script lo avisa y continúa, y se pueden subir desde la app. Los **datos de demostración** (unas 770 ventas en 120 días, compras, clientes y más productos) no están en el script: los genera la API al arrancar. En Docker vienen activados; sin Docker, se activan con `dotnet user-secrets set "Demo:Generar" "true" --project src/Pedidos.Api`.
+
 **API** (http://localhost:5080, con Swagger en `/swagger`). Los secretos van en *user-secrets*, fuera del repositorio:
 
 ```bash
