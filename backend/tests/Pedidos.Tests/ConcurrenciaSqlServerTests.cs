@@ -28,9 +28,7 @@ public class ConcurrenciaSqlServerTests
         await using (var db = new AppDbContext(options))
         {
             await db.Database.EnsureCreatedAsync();
-            db.Usuarios.AddRange(TestDb.UsuariosSemilla());
-            db.Productos.AddRange(TestDb.ProductosSemilla());
-            await db.SaveChangesAsync();
+            TestDb.Sembrar(db);
         }
 
         try
@@ -44,7 +42,7 @@ public class ConcurrenciaSqlServerTests
                 await using var db = new AppDbContext(options);
                 try
                 {
-                    await new PedidoService(db, TimeProvider.System).CrearAsync(
+                    await TestDb.Ventas(db).CrearAsync(
                         TestDb.VendedorId, new CrearPedidoRequest(new() { new LineaPedidoRequest(ProductoUltimaUnidad, 1) }));
                     return true;
                 }

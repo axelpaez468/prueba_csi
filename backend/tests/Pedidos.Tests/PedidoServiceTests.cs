@@ -16,7 +16,7 @@ public class PedidoServiceTests : IDisposable
     private async Task<PedidoResponse> Crear(int usuarioId, params LineaPedidoRequest[] lineas)
     {
         await using var db = _testDb.CrearContexto();
-        return await new PedidoService(db, TimeProvider.System).CrearAsync(usuarioId, new CrearPedidoRequest(lineas.ToList()));
+        return await TestDb.Ventas(db).CrearAsync(usuarioId, new CrearPedidoRequest(lineas.ToList()));
     }
 
     private static LineaPedidoRequest Linea(int productoId, int cantidad) => new(productoId, cantidad);
@@ -35,7 +35,7 @@ public class PedidoServiceTests : IDisposable
         var request = JsonSerializer.Deserialize<CrearPedidoRequest>(json, new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
 
         await using var db = _testDb.CrearContexto();
-        var pedido = await new PedidoService(db, TimeProvider.System).CrearAsync(TestDb.VendedorId, request);
+        var pedido = await TestDb.Ventas(db).CrearAsync(TestDb.VendedorId, request);
 
         Assert.Equal(150.00m, pedido.Lineas.Single(l => l.ProductoId == 1).PrecioUnitario);
         Assert.Equal(300.00m, pedido.Lineas.Single(l => l.ProductoId == 1).Subtotal);
@@ -119,6 +119,14 @@ public class PedidoServiceTests : IDisposable
         await Assert.ThrowsAsync<BusinessRuleException>(() => Crear(TestDb.VendedorId));
     }
 
+    [Fact]
+    public async Task Crear_ConUnaLineaNula_Falla_SinErrorInterno()
+    {
+        // JSON {"lineas":[null]}: antes terminaba en NullReferenceException (500).
+        await Assert.ThrowsAsync<BusinessRuleException>(() => Crear(TestDb.VendedorId, new LineaPedidoRequest(1, 1), null!));
+        Assert.Equal(10, _testDb.StockDe(1));
+    }
+
     // ---------- Límites de tamaño (protección contra abuso de recursos) ----------
 
     [Fact]
@@ -148,10 +156,10 @@ public class PedidoServiceTests : IDisposable
     {
         var pedido = await Crear(TestDb.VendedorId, Linea(1, 1));
         await using var db = _testDb.CrearContexto();
-        var service = new PedidoService(db, TimeProvider.System);
+        var service = TestDb.Ventas(db);
 
-        Assert.Null(await service.ObtenerAsync(pedido.Numero, TestDb.OtroVendedorId, esAdmin: false));
-        Assert.NotNull(await service.ObtenerAsync(pedido.Numero, TestDb.VendedorId, esAdmin: false));
-        Assert.NotNull(await service.ObtenerAsync(pedido.Numero, TestDb.AdminId, esAdmin: true));
+        Assert.Null(await service.ObtenerAsync(pedido.Numero, TestDb.OtroVendedorId, veTodas: false));
+        Assert.NotNull(await service.ObtenerAsync(pedido.Numero, TestDb.VendedorId, veTodas: false));
+        Assert.NotNull(await service.ObtenerAsync(pedido.Numero, TestDb.AdminId, veTodas: true));
     }
 }

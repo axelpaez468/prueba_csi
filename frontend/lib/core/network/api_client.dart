@@ -31,14 +31,31 @@ class ApiClient {
   Future<dynamic> post(String path, Object body, {bool authenticated = true}) =>
       _send('POST', path, body: body, authenticated: authenticated);
 
-  Future<dynamic> _send(String method, String path, {Object? body, bool authenticated = true}) async {
-    final request = http.Request(method, _baseUri.resolve(path))
-      ..headers['Accept'] = 'application/json';
+  Future<dynamic> put(String path, Object body) => _send('PUT', path, body: body);
 
-    if (body != null) {
-      request.headers['Content-Type'] = 'application/json';
-      request.body = jsonEncode(body);
+  Future<dynamic> delete(String path) => _send('DELETE', path);
+
+  /// Sube un archivo como multipart/form-data en el campo [campo].
+  Future<dynamic> postArchivo(String path, String campo, List<int> bytes, String nombreArchivo) =>
+      _send('POST', path, archivo: (campo, bytes, nombreArchivo));
+
+  Future<dynamic> _send(String method, String path,
+      {Object? body, bool authenticated = true, (String, List<int>, String)? archivo}) async {
+    final http.BaseRequest request;
+    if (archivo != null) {
+      final (campo, bytes, nombre) = archivo;
+      request = http.MultipartRequest(method, _baseUri.resolve(path))
+        ..files.add(http.MultipartFile.fromBytes(campo, bytes, filename: nombre));
+    } else {
+      final r = http.Request(method, _baseUri.resolve(path));
+      if (body != null) {
+        r.headers['Content-Type'] = 'application/json';
+        r.body = jsonEncode(body);
+      }
+      request = r;
     }
+    request.headers['Accept'] = 'application/json';
+
     if (authenticated) {
       final token = await tokenProvider();
       if (token != null) request.headers['Authorization'] = 'Bearer $token';
@@ -55,7 +72,13 @@ class ApiClient {
 
     final status = response.statusCode;
     if (status >= 200 && status < 300) {
-      return response.body.isEmpty ? null : jsonDecode(utf8.decode(response.bodyBytes));
+      if (response.body.isEmpty) return null;
+      try {
+        return jsonDecode(utf8.decode(response.bodyBytes));
+      } on FormatException {
+        // P. ej. un proxy que responde su propia página HTML: mejor un mensaje claro que una pantalla vacía.
+        throw const ApiException(respuestaInesperada);
+      }
     }
 
     final mensaje = _mensajeDeError(response);
@@ -65,6 +88,8 @@ class ApiClient {
     }
     throw ApiException(mensaje ?? _mensajePorEstado(status), statusCode: status);
   }
+
+  static const respuestaInesperada = 'El servidor envió una respuesta inesperada. Intente de nuevo más tarde.';
 
   /// La API responde errores como { "error": "..." }.
   static String? _mensajeDeError(http.Response response) {

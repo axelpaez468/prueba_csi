@@ -5,6 +5,9 @@ class Producto {
     required this.nombre,
     required this.precio,
     required this.stock,
+    this.marca,
+    this.categoria,
+    this.imagenId,
   });
 
   final int id;
@@ -14,6 +17,11 @@ class Producto {
   /// Precio informativo para mostrar; el precio que se cobra lo decide el servidor.
   final double precio;
   final int stock;
+  final String? marca;
+  final String? categoria;
+
+  /// Foto principal; null si el producto no tiene fotos (se muestra una ilustración).
+  final int? imagenId;
 
   bool get disponible => stock > 0;
 
@@ -23,5 +31,60 @@ class Producto {
         nombre: json['nombre'] as String,
         precio: (json['precio'] as num).toDouble(),
         stock: json['stock'] as int,
+        marca: json['marca'] as String?,
+        categoria: json['categoria'] as String?,
+        imagenId: json['imagenId'] as int?,
       );
 }
+
+/// Especificación técnica: "Conexión" → "USB-C".
+class Especificacion {
+  const Especificacion(this.nombre, this.valor);
+
+  final String nombre;
+  final String valor;
+
+  factory Especificacion.fromJson(Map<String, dynamic> j) =>
+      Especificacion((j['nombre'] as String?) ?? '', (j['valor'] as String?) ?? '');
+
+  Map<String, dynamic> toJson() => {'nombre': nombre, 'valor': valor};
+
+  static List<Especificacion> lista(Object? json) =>
+      ((json as List?) ?? const []).map((e) => Especificacion.fromJson(e as Map<String, dynamic>)).toList();
+}
+
+/// Ficha completa del producto (pantalla de detalle del catálogo).
+class ProductoDetalle {
+  const ProductoDetalle({
+    required this.producto,
+    this.descripcion,
+    required this.garantiaMeses,
+    required this.especificaciones,
+    this.imagenes = const [],
+  });
+
+  final Producto producto;
+  final String? descripcion;
+  final int garantiaMeses;
+  final List<Especificacion> especificaciones;
+
+  /// Ids de las fotos, en orden (la primera es la principal).
+  final List<int> imagenes;
+
+  factory ProductoDetalle.fromJson(Map<String, dynamic> j) => ProductoDetalle(
+        producto: Producto.fromJson(j),
+        descripcion: j['descripcion'] as String?,
+        garantiaMeses: (j['garantiaMeses'] as int?) ?? 0,
+        especificaciones: Especificacion.lista(j['especificaciones']),
+        imagenes: ((j['imagenes'] as List?) ?? const []).cast<int>(),
+      );
+}
+
+String garantiaLegible(int meses) => switch (meses) {
+      0 => 'Sin garantía',
+      12 => '1 año de garantía',
+      24 => '2 años de garantía',
+      36 => '3 años de garantía',
+      1 => '1 mes de garantía',
+      _ => '$meses meses de garantía',
+    };

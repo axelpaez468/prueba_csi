@@ -1,26 +1,60 @@
 import 'dart:convert';
 
+import 'package:flutter/gestures.dart';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:pedidos_app/core/network/api_client.dart';
 import 'package:pedidos_app/core/security/session.dart';
-import 'package:pedidos_app/core/security/token_storage.dart';
 import 'package:pedidos_app/core/theme/app_theme.dart';
+import 'package:pedidos_app/core/util/formatters.dart';
 import 'package:pedidos_app/data/models/pedido.dart';
 import 'package:pedidos_app/data/models/producto.dart';
 import 'package:pedidos_app/data/repositories/auth_repository.dart';
+import 'package:pedidos_app/data/repositories/cuenta_repository.dart';
+import 'package:pedidos_app/data/repositories/erp_repositories.dart';
 import 'package:pedidos_app/data/repositories/pedido_repository.dart';
 import 'package:pedidos_app/data/repositories/producto_repository.dart';
+import 'package:pedidos_app/data/repositories/usuario_repository.dart';
 import 'package:pedidos_app/features/auth/login_screen.dart';
+import 'package:pedidos_app/features/auth/recuperar_password_screen.dart';
+import 'package:pedidos_app/features/auth/restablecer_password_screen.dart';
+import 'package:pedidos_app/features/auth/segundo_factor_screen.dart';
 import 'package:pedidos_app/features/auth/session_controller.dart';
 import 'package:pedidos_app/features/cart/cart_controller.dart';
 import 'package:pedidos_app/features/cart/cart_screen.dart';
 import 'package:pedidos_app/features/catalog/catalog_controller.dart';
 import 'package:pedidos_app/features/catalog/catalog_screen.dart';
+import 'package:pedidos_app/features/catalog/producto_detalle_screen.dart';
+import 'package:pedidos_app/features/ventas/reporte_ventas_screen.dart';
+import 'package:pedidos_app/features/ventas/pipeline_screen.dart';
+import 'package:pedidos_app/features/ventas/mapa_ventas.dart';
+import 'package:pedidos_app/features/clientes/clientes_screen.dart';
+import 'package:pedidos_app/features/clientes/tercero_form_dialog.dart';
+import 'package:pedidos_app/features/compras/ordenes_screen.dart';
+import 'package:pedidos_app/features/compras/proveedores_screen.dart';
+import 'package:pedidos_app/features/contabilidad/cuentas_screen.dart';
+import 'package:pedidos_app/features/contabilidad/libro_diario_screen.dart';
+import 'package:pedidos_app/features/contabilidad/reportes_screen.dart';
+import 'package:pedidos_app/features/cuenta/bitacora_screen.dart';
+import 'package:pedidos_app/features/cuenta/seguridad_screen.dart';
+import 'package:pedidos_app/features/inventario/inventario_dialogs.dart';
+import 'package:pedidos_app/features/inventario/inventario_screen.dart';
+import 'package:pedidos_app/features/panel/panel_screen.dart';
+import 'package:pedidos_app/features/shell/modulos.dart';
+import 'package:pedidos_app/features/productos/productos_screen.dart';
+import 'package:pedidos_app/features/reportes/pronostico_screen.dart';
 import 'package:pedidos_app/features/order/order_confirmation_screen.dart';
+import 'package:pedidos_app/features/usuarios/usuario_form_dialog.dart';
+import 'package:pedidos_app/features/usuarios/usuarios_screen.dart';
+import 'package:pedidos_app/features/ventas/ventas_screen.dart';
+import 'package:pedidos_app/data/models/erp.dart';
 import 'package:provider/provider.dart';
+
+import '../infra/storage_en_memoria.dart';
 
 /// Renderiza cada pantalla en tamaños de celular, tablet y escritorio.
 /// Cualquier desborde de layout ("RenderFlex overflowed") hace fallar la prueba.
@@ -34,52 +68,321 @@ const _tamanos = {
 };
 
 final _productos = [
-  const Producto(id: 1, codigo: 'P-001', nombre: 'Teclado mecánico', precio: 450, stock: 25),
+  const Producto(id: 1, codigo: 'P-001', nombre: 'Teclado mecánico', precio: 450, stock: 25, marca: 'KeyForge', categoria: 'Periféricos'),
   const Producto(id: 2, codigo: 'P-002', nombre: 'Mouse inalámbrico', precio: 125.5, stock: 3),
   const Producto(id: 3, codigo: 'P-003', nombre: 'Monitor 27" con nombre largo para probar el ajuste', precio: 2350, stock: 1),
   const Producto(id: 4, codigo: 'P-004', nombre: 'Audífonos USB', precio: 199.99, stock: 12),
   const Producto(id: 5, codigo: 'P-005', nombre: 'Webcam HD', precio: 310, stock: 0),
 ];
 
-class _StorageEnMemoria extends TokenStorage {
-  _StorageEnMemoria(this._session);
-  Session? _session;
+final _accesos = [
+  for (final (evento, exito) in [('LOGIN_EXITOSO', true), ('2FA_FALLIDO', false), ('DISPOSITIVO_NUEVO', true)])
+    {
+      'fecha': '2026-09-29T15:30:00Z',
+      'email': 'usuario-con-correo-bastante-largo@empresa-de-ejemplo.com',
+      'evento': evento,
+      'exito': exito,
+      'ip': '203.0.113.200',
+      'dispositivo': 'Chrome en Windows',
+      'detalle': null,
+    }
+];
 
-  @override
-  Future<Session?> read() async => _session;
-  @override
-  Future<void> save(Session session) async => _session = session;
-  @override
-  Future<void> clear() async => _session = null;
+const _nombreLargo = 'Distribuidora Tecnológica Centroamericana del Pacífico, Sociedad Anónima';
+
+Map<String, dynamic> _productoInv(int i) => {
+      'id': i,
+      'codigo': 'P-00$i',
+      'nombre': i == 3 ? 'Monitor 27" con nombre largo para probar el ajuste' : 'Producto $i',
+      'precio': 2350.0,
+      'stock': i == 3 ? 0 : 12000,
+      'stockMinimo': 5,
+      'costoPromedio': 1258.9286,
+      'valorInventario': 15107142.86,
+      'activo': i != 5,
+      'bajoMinimo': i == 3,
+      'margen': 40.1,
+      'imagenes': [for (var j = 1; j <= (i % 3) * 2; j++) j],
+    };
+
+final _cuentas = [
+  for (final (i, (codigo, nombre, tipo)) in [
+    ('1102', 'Bancos', 'ACTIVO'),
+    ('1103', 'Inventario de mercadería', 'ACTIVO'),
+    ('2102', 'IVA por pagar (débito fiscal)', 'PASIVO'),
+    ('3101', 'Capital social', 'CAPITAL'),
+    ('4101', 'Ventas', 'INGRESO'),
+    ('6103', 'Energía eléctrica, agua y teléfono', 'GASTO'),
+  ].indexed)
+    {'id': i + 1, 'codigo': codigo, 'nombre': nombre, 'tipo': tipo, 'activa': true, 'esSistema': i < 5, 'saldo': 1234567.89},
+];
+
+List<Map<String, dynamic>> _renglones(String codigo) =>
+    [{'codigo': codigo, 'cuenta': 'Cuenta con un nombre largo para el reporte', 'monto': 9876543.21}];
+
+final _lineaPartida = [
+  {'cuentaId': 1, 'codigo': '1102', 'cuenta': 'Bancos', 'debe': 1234567.89, 'haber': 0},
+  {'cuentaId': 3, 'codigo': '2102', 'cuenta': 'IVA por pagar (débito fiscal) con nombre largo', 'debe': 0, 'haber': 1234567.89},
+];
+
+List<Map<String, dynamic>> _filasReporte(String clave) => [
+      for (var i = 1; i <= 3; i++)
+        {
+          'productoId': i, 'codigo': 'P-00$i', 'nombre': 'Monitor 27" con nombre largo para probar el ajuste $i',
+          'categoria': 'Periféricos', 'unidades': 12345, 'total': 1234567.89, 'ventasSinIva': 1102292.76, 'costo': 800000,
+          'utilidad': 302292.76, 'margen': 27.4, 'participacion': 33.3, 'usuarioId': i,
+          'vendedor': 'María Fernanda Hernández de la Cruz', 'facturas': 120, 'clienteId': i, 'nit': '1234567-9',
+          'cliente': _nombreLargo, 'formaPago': 'TRANSFERENCIA', 'clave': clave,
+        },
+    ];
+
+Map<String, dynamic> _resumenVentas(double total) => {
+      'facturas': 120, 'unidades': 3456, 'total': total, 'baseImponible': total / 1.12, 'iva': total - total / 1.12,
+      'costo': 800000, 'utilidadBruta': 302292.76, 'margen': 27.4, 'ticketPromedio': 10288.07,
+    };
+
+Object? _respuestaErp(String ruta) => switch (ruta) {
+      '/api/productos/1' => {
+          'id': 1, 'codigo': 'P-001', 'nombre': 'Teclado mecánico con un nombre largo', 'precio': 450, 'stock': 2,
+          'marca': 'KeyForge', 'categoria': 'Periféricos', 'garantiaMeses': 12, 'imagenes': [1, 2, 3, 4, 5],
+          'descripcion': 'Teclado mecánico de tamaño completo pensado para jornadas largas.\n\nIncluye reposamuñecas y cable USB-C.',
+          'especificaciones': [
+            {'nombre': 'Interruptores', 'valor': 'Mecánicos lineales rojos, 45 g, 50 millones de pulsaciones'},
+            {'nombre': 'Conexión', 'valor': 'USB-C desmontable'},
+          ],
+        },
+      '/api/geografia' => [
+          {'nombre': 'Guatemala', 'iso': 'GT-GU', 'municipios': ['Guatemala', 'Mixco', 'Villa Nueva']},
+          {'nombre': 'Quetzaltenango', 'iso': 'GT-QZ', 'municipios': ['Quetzaltenango', 'Coatepeque']},
+        ],
+      '/api/pipeline' => [
+          for (final (i, e) in ['NUEVO', 'REVISADO', 'AUTORIZADO', 'DESPACHADO', 'EN_CAMINO', 'ENTREGADO', 'NUEVO'].indexed)
+            {
+              'numero': 2000 + i, 'fecha': '2026-09-25T15:30:00Z', 'clienteNombre': _nombreLargo, 'vendedor': 'María Fernanda Hernández',
+              'total': 12345.67, 'productos': 3, 'departamento': 'Quetzaltenango', 'municipio': 'San Juan Ostuncalco', 'estado': e,
+              'estadoDesde': '2026-09-25T15:30:00Z', 'puedeAvanzarA': i == 2 ? 'DESPACHADO' : (i == 0 ? 'REVISADO' : null),
+            },
+        ],
+      '/api/reportes/pronostico' => {
+          'desde': '2026-09-01', 'hasta': '2026-09-30', 'agrupacion': 'DIA',
+          'facturasCerradas': 120, 'cerrado': 1234567.89, 'facturasAbiertas': 45, 'abierto': 456789.12,
+          'ponderadoAbierto': 210345.67, 'pronostico': 1444913.56, 'probabilidadAbiertas': 46.1, 'avanceCierre': 85.4,
+          'etapas': [
+            for (final (i, (e, prob)) in [('NUEVO', 10), ('REVISADO', 25), ('AUTORIZADO', 50), ('DESPACHADO', 75), ('EN_CAMINO', 90), ('ENTREGADO', 100)].indexed)
+              {'estado': e, 'nombre': e, 'probabilidad': prob, 'facturas': i == 1 ? 0 : 10 + i, 'total': i == 1 ? 0 : 98765.43 * (i + 1),
+                'ponderado': i == 1 ? 0 : 98765.43 * (i + 1) * prob / 100},
+          ],
+          'tendencia': [
+            for (var d = 1; d <= 30; d++)
+              {'desde': '2026-09-${d.toString().padLeft(2, '0')}', 'hasta': '2026-09-${d.toString().padLeft(2, '0')}',
+                'cerrado': d < 25 ? d * 2000.0 : 0, 'abierto': d >= 20 ? d * 1500.0 : 0, 'ponderado': d >= 20 ? d * 500.0 : 0},
+          ],
+          'porVendedor': [
+            for (var i = 1; i <= 3; i++)
+              {'usuarioId': i, 'vendedor': 'María Fernanda Hernández $i', 'facturas': 40 + i, 'cerrado': 400000.0 * i,
+                'abierto': 150000.0, 'ponderado': 70000.0, 'pronostico': 400000.0 * i + 70000},
+          ],
+          'probabilidadesActualizadasEn': '2026-09-28T15:30:00Z', 'probabilidadesActualizadasPor': 'admin',
+        },
+      '/api/reportes/pronostico/probabilidades' => {'mensaje': 'Se guardaron las probabilidades de cierre.'},
+      '/api/reportes/ventas' => {
+          'porDepartamento': [
+            {'departamento': 'Guatemala', 'iso': 'GT-GU', 'facturas': 300, 'unidades': 900, 'total': 950000.5, 'participacion': 50.4,
+              'productoTop': 'Combo teclado y mouse con nombre largo', 'unidadesProductoTop': 120},
+            {'departamento': 'Petén', 'iso': 'GT-PE', 'facturas': 20, 'unidades': 40, 'total': 50000, 'participacion': 2.6,
+              'productoTop': 'Memoria USB 128 GB', 'unidadesProductoTop': 15},
+            {'departamento': 'Sin departamento', 'iso': null, 'facturas': 5, 'unidades': 6, 'total': 1200, 'participacion': 0.1,
+              'productoTop': null, 'unidadesProductoTop': 0},
+          ],
+          'porEstado': [
+            for (final (i, e) in ['NUEVO', 'REVISADO', 'AUTORIZADO', 'DESPACHADO', 'EN_CAMINO', 'ENTREGADO'].indexed)
+              {'estado': e, 'nombre': e, 'facturas': i * 10 + 1, 'total': i * 1000.0},
+          ],
+          'desde': '2026-09-01', 'hasta': '2026-09-30',
+          'resumen': _resumenVentas(1234567.89),
+          'periodoAnterior': _resumenVentas(1000000),
+          'porDia': [for (var d = 1; d <= 30; d++) {'fecha': '2026-09-${d.toString().padLeft(2, '0')}', 'facturas': d, 'total': d * 1000.0}],
+          'porProducto': _filasReporte('p'),
+          'porCategoria': _filasReporte('c'),
+          'porVendedor': _filasReporte('v'),
+          'porCliente': _filasReporte('cl'),
+          'porFormaPago': _filasReporte('f'),
+        },
+      '/api/panel' => {
+          'ventasHoy': 12345.67,
+          'cantidadVentasHoy': 3,
+          'ventasMes': 1234567.89,
+          'cantidadVentasMes': 120,
+          'utilidadBrutaMes': 345678.9,
+          'comprasMes': 98765.43,
+          'valorInventario': 2345678.9,
+          'ordenesPendientes': 2,
+          'productosBajoMinimo': [
+            {'id': 3, 'codigo': 'P-003', 'nombre': 'Monitor 27" con nombre largo para probar el ajuste', 'stock': 0, 'stockMinimo': 2},
+          ],
+          'ventasUltimos7Dias': [
+            for (var d = 24; d <= 30; d++) {'fecha': '2026-09-$d', 'total': d * 1000.0},
+          ],
+        },
+      '/api/clientes' => [
+          {'id': 1, 'nit': 'CF', 'nitFormateado': 'CF', 'nombre': 'Consumidor Final', 'direccion': 'Ciudad', 'telefono': null,
+            'email': null, 'activo': true, 'esConsumidorFinal': true},
+          {'id': 2, 'nit': '12345679', 'nitFormateado': '1234567-9', 'nombre': _nombreLargo, 'direccion': '6a. avenida 10-20, zona 1',
+            'telefono': '+50222330101', 'email': 'facturacion.cliente@empresa-ejemplo.com.gt', 'activo': false, 'esConsumidorFinal': false},
+        ],
+      '/api/pedidos' => [
+          for (var i = 1; i <= 3; i++)
+            {'numero': 1000 + i, 'serie': 'A', 'fecha': '2026-09-30T15:30:00Z', 'clienteNit': '1234567-9', 'clienteNombre': _nombreLargo,
+              'vendedor': 'María Fernanda Hernández de la Cruz', 'formaPago': 'TRANSFERENCIA', 'productos': 3, 'total': 1234567.89},
+        ],
+      '/api/pedidos/1234' || '/api/pipeline/1234' => {
+          'direccionEntrega': '6a. avenida 10-20, zona 1', 'departamento': 'Quetzaltenango', 'municipio': 'Coatepeque',
+          'estado': 'DESPACHADO',
+          'historial': [
+            for (final (e, u) in [('NUEVO', 'Vendedor Demo'), ('REVISADO', 'Vendedor Demo'), ('AUTORIZADO', 'Contador Demo'), ('DESPACHADO', 'Bodega Demo')])
+              {'estado': e, 'fecha': '2026-09-29T15:30:00Z', 'usuario': u, 'nota': e == 'DESPACHADO' ? 'Guía 4521 de transporte' : null},
+          ],
+          'numero': 1234, 'fecha': '2026-09-29T15:30:00Z', 'usuarioId': 1, 'total': 3375.5, 'serie': 'A',
+          'autorizacion': '3f2504e0-4f89-11d3-9a0c-0305e82c3301', 'clienteId': 2, 'clienteNit': '1234567-9', 'clienteNombre': _nombreLargo,
+          'clienteDireccion': '6a. avenida 10-20, zona 1', 'vendedor': 'Vendedor Demo', 'formaPago': 'EFECTIVO',
+          'baseImponible': 3013.84, 'iva': 361.66,
+          'lineas': [
+            {'productoId': 1, 'codigo': 'P-001', 'nombre': 'Teclado mecánico', 'cantidad': 2, 'precioUnitario': 450, 'subtotal': 900},
+          ],
+        },
+      '/api/inventario/productos' => [for (var i = 1; i <= 5; i++) _productoInv(i)],
+      '/api/inventario/productos/3/kardex' => {
+          'producto': _productoInv(3),
+          'movimientos': [
+            for (final (i, (tipo, cant)) in [('INICIAL', 25), ('COMPRA', 10000), ('VENTA', -2), ('AJUSTE_SALIDA', -1)].indexed)
+              {'id': i + 1, 'fecha': '2026-09-30T15:30:00Z', 'tipo': tipo, 'cantidad': cant, 'costoUnitario': 1258.9286, 'saldo': 12000,
+                'costoPromedio': 1258.9286, 'referencia': 'OC-15, factura A-000458 del proveedor', 'usuario': 'Bodega Demo'},
+          ],
+        },
+      '/api/compras/proveedores' => [
+          {'id': 1, 'nit': '33445567', 'nitFormateado': '3344556-7', 'nombre': _nombreLargo, 'contacto': 'Ana Lucía Pérez',
+            'telefono': '+50222220101', 'email': 'ventas@distribuidora-ejemplo.com.gt', 'direccion': 'Zona 4', 'activo': true},
+        ],
+      '/api/compras/ordenes' => [
+          for (final (i, estado) in ['PENDIENTE', 'RECIBIDA', 'ANULADA'].indexed)
+            {'numero': 7 + i, 'fecha': '2026-09-30T15:30:00Z', 'estado': estado, 'proveedorNombre': _nombreLargo, 'productos': 4,
+              'total': 1234567.89, 'facturaProveedor': estado == 'RECIBIDA' ? 'A-000458' : null},
+        ],
+      '/api/compras/ordenes/7' => {
+          'numero': 7, 'fecha': '2026-09-30T15:30:00Z', 'estado': 'PENDIENTE', 'proveedorId': 1, 'proveedorNit': '3344556-7',
+          'proveedorNombre': _nombreLargo, 'subtotal': 1100, 'iva': 132, 'total': 1232, 'observaciones': 'Reposición urgente',
+          'creadaPor': 'Compras Demo', 'fechaRecepcion': null, 'recibidaPor': null, 'facturaProveedor': null,
+          'lineas': [
+            {'productoId': 3, 'codigo': 'P-003', 'nombre': 'Monitor 27" con nombre largo para probar el ajuste', 'cantidad': 10000,
+              'costoUnitario': 1100, 'subtotal': 11000000},
+          ],
+        },
+      '/api/contabilidad/cuentas' => _cuentas,
+      '/api/contabilidad/partidas' => [
+          for (final origen in ['APERTURA', 'VENTA', 'MANUAL'])
+            {'numero': 1, 'fecha': '2026-09-30', 'concepto': 'Factura A-15 a $_nombreLargo, efectivo', 'origen': origen,
+              'referenciaId': 15, 'total': 1234567.89, 'creadoEn': '2026-09-30T15:30:00Z', 'lineas': _lineaPartida},
+        ],
+      '/api/contabilidad/reportes/mayor/1' => {
+          'cuenta': _cuentas[0], 'desde': '2026-09-01', 'hasta': '2026-09-30', 'saldoInicial': 100000, 'totalDebe': 1234567.89,
+          'totalHaber': 234567.89, 'saldoFinal': 1100000,
+          'movimientos': [
+            {'fecha': '2026-09-30', 'partida': 12, 'concepto': 'Compra OC-1 a $_nombreLargo', 'debe': 0, 'haber': 2139.2, 'saldo': 97860.8},
+          ],
+        },
+      '/api/contabilidad/reportes/balance-comprobacion' => {
+          'desde': '2026-09-01', 'hasta': '2026-09-30', 'totalDebe': 1234567.89, 'totalHaber': 1234567.89, 'totalSaldoDeudor': 1000,
+          'totalSaldoAcreedor': 1000, 'cuadra': true,
+          'filas': [
+            {'codigo': '1102', 'cuenta': 'Bancos con un nombre bastante largo', 'tipo': 'ACTIVO', 'debe': 1234567.89, 'haber': 234567.89,
+              'saldoDeudor': 1000000, 'saldoAcreedor': 0},
+          ],
+        },
+      '/api/contabilidad/reportes/estado-resultados' => {
+          'desde': '2026-09-01', 'hasta': '2026-09-30', 'ingresos': _renglones('4101'), 'totalIngresos': 9876543.21,
+          'costos': _renglones('5101'), 'totalCostos': 1234567.89, 'utilidadBruta': 8641975.32, 'gastos': _renglones('6103'),
+          'totalGastos': 123.45, 'utilidadNeta': -8641851.87,
+        },
+      '/api/contabilidad/reportes/balance-general' => {
+          'al': '2026-09-30', 'activos': _renglones('1102'), 'totalActivos': 9876543.21, 'pasivos': _renglones('2102'),
+          'totalPasivos': 1234567.89, 'capital': _renglones('3101'), 'resultadoDelEjercicio': -1472.14, 'totalCapital': 8641975.32,
+          'totalPasivoYCapital': 9876543.21, 'cuadra': true,
+        },
+      _ => null,
+    };
+
+/// Método que devuelve el login simulado: 'TOTP' (verificar) o 'CONFIGURAR' (primer ingreso de un admin).
+var _metodoLogin = 'TOTP';
+
+/// API simulada: responde según la ruta.
+http.Response _responder(http.Request req) {
+  final cuerpo = switch (req.url.path) {
+    '/api/productos' => [
+        for (final p in _productos)
+          {'id': p.id, 'codigo': p.codigo, 'nombre': p.nombre, 'precio': p.precio, 'stock': p.stock, 'marca': p.marca,
+            'categoria': p.categoria},
+      ],
+    '/api/cuenta/seguridad' => {
+        'email': 'usuario-con-correo-bastante-largo@empresa-de-ejemplo.com',
+        'metodo': 'TOTP',
+        'codigosRespaldoRestantes': 2,
+        'dosFactorObligatorio': true,
+      },
+    '/api/cuenta/accesos' || '/api/admin/bitacora' => _accesos,
+    '/api/admin/usuarios' => [
+        for (final (i, (nombre, rol, activo, pass)) in [
+          ('María Fernanda', 'ADMIN', true, true),
+          ('José Alejandro', 'VENDEDOR', true, false),
+          ('Ana Lucía', 'VENDEDOR', false, true),
+        ].indexed)
+          {
+            'id': i + 1,
+            'nombre': nombre,
+            'apellido': 'Hernández de la Cruz',
+            'nombreCompleto': '$nombre Hernández de la Cruz',
+            'email': 'usuario.con.correo.largo$i@empresa-ejemplo.com.gt',
+            'telefono': '+5025555010$i',
+            'codigoCorporativo': 'VEN-000$i',
+            'rol': rol,
+            'activo': activo,
+            'dosFactor': rol == 'ADMIN' ? 'SMS' : 'NINGUNO',
+            'tieneContrasena': pass,
+            'creadoEn': '2026-09-29T15:30:00Z',
+          },
+      ],
+    '/api/pipeline/2002/avanzar' => {'mensaje': 'La venta A-2002 pasó a Despachado.'},
+    '/api/auth/login' => {'requiereSegundoFactor': true, 'desafio': 'd', 'metodo': _metodoLogin, 'secreto': 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP', 'uri': 'otpauth://totp/Sistema%20de%20Pedidos:admin@pedidos.local?secret=JBSWY3DPEHPK3PXP&issuer=Sistema%20de%20Pedidos'},
+    final ruta => _respuestaErp(ruta) ?? <String, dynamic>{},
+  };
+  return http.Response(jsonEncode(cuerpo), 200, headers: {'content-type': 'application/json; charset=utf-8'});
 }
 
 ApiClient _api() => ApiClient(
       baseUrl: 'http://api.test',
       tokenProvider: () async => 'token',
-      httpClient: MockClient((req) async => http.Response(
-            jsonEncode([
-              for (final p in _productos)
-                {'id': p.id, 'codigo': p.codigo, 'nombre': p.nombre, 'precio': p.precio, 'stock': p.stock},
-            ]),
-            200,
-            headers: {'content-type': 'application/json; charset=utf-8'},
-          )),
+      httpClient: MockClient((req) async => _responder(req)),
     );
 
-Future<void> _montar(WidgetTester tester, Size tamano, Widget pantalla, {bool autenticado = true}) async {
+enum _Sesion { anonima, autenticada, segundoFactor }
+
+Future<void> _montar(WidgetTester tester, Size tamano, Widget pantalla,
+    {_Sesion sesion = _Sesion.autenticada, String rol = 'ADMIN'}) async {
   tester.view
     ..physicalSize = tamano
     ..devicePixelRatio = 1;
   addTearDown(tester.view.reset);
 
   final api = _api();
+  final auth = AuthRepository(api);
   final session = SessionController(
-    AuthRepository(api),
-    _StorageEnMemoria(autenticado
-        ? Session(token: 't', username: 'vendedor', rol: 'VENDEDOR', expiraEn: DateTime.utc(2100))
+    auth,
+    StorageEnMemoria(sesion == _Sesion.autenticada
+        ? Session(token: 't', username: 'vendedor', email: 'vendedor@pedidos.local', rol: rol, expiraEn: DateTime.utc(2100))
         : null),
   );
   await session.restore();
+  if (sesion == _Sesion.segundoFactor) await session.login('admin@pedidos.local', 'x');
+
   final catalogo = CatalogController(ProductoRepository(api));
   final carrito = CartController(PedidoRepository(api))
     ..agregar(_productos[0], 2)
@@ -88,7 +391,21 @@ Future<void> _montar(WidgetTester tester, Size tamano, Widget pantalla, {bool au
 
   await tester.pumpWidget(MultiProvider(
     providers: [
+      Provider.value(value: auth),
+      Provider.value(value: CuentaRepository(api)),
+      Provider.value(value: UsuarioRepository(api)),
+      Provider.value(value: PedidoRepository(api)),
+      Provider.value(value: ClienteRepository(api)),
+      Provider.value(value: InventarioRepository(api)),
+      Provider.value(value: CompraRepository(api)),
+      Provider.value(value: ContabilidadRepository(api)),
+      Provider.value(value: PanelRepository(api)),
+      Provider.value(value: ReporteRepository(api)),
+      Provider.value(value: ProductoRepository(api)),
+      Provider.value(value: GeografiaRepository(api)),
+      Provider.value(value: PipelineRepository(api)),
       ChangeNotifierProvider.value(value: session),
+      ChangeNotifierProvider(create: (_) => NavegacionController()),
       ChangeNotifierProvider.value(value: catalogo),
       ChangeNotifierProvider.value(value: carrito),
     ],
@@ -118,24 +435,371 @@ void main() {
   for (final MapEntry(key: nombre, value: tamano) in _tamanos.entries) {
     group(nombre, () {
       testWidgets('login', (tester) async {
-        await _montar(tester, tamano, const LoginScreen(), autenticado: false);
+        await _montar(tester, tamano, const LoginScreen(), sesion: _Sesion.anonima);
         expect(find.text('Iniciar sesión'), findsOneWidget);
+        expect(find.text('¿Olvidaste tu contraseña?'), findsOneWidget);
+      });
+
+      testWidgets('verificación en dos pasos', (tester) async {
+        _metodoLogin = 'TOTP';
+        await _montar(tester, tamano, const SegundoFactorScreen(), sesion: _Sesion.segundoFactor);
+        expect(find.text('Verificación en dos pasos'), findsOneWidget);
+        expect(find.textContaining('Google Authenticator'), findsWidgets);
+      });
+
+      testWidgets('configurar Google Authenticator en el primer ingreso', (tester) async {
+        _metodoLogin = 'CONFIGURAR';
+        await _montar(tester, tamano, const SegundoFactorScreen(), sesion: _Sesion.segundoFactor);
+        expect(find.text('Configura la verificación en dos pasos'), findsOneWidget);
+        expect(find.byKey(const Key('qr-totp')), findsOneWidget);
+        expect(find.text('Activar y entrar'), findsOneWidget);
+      });
+
+      testWidgets('códigos de respaldo tras configurar', (tester) async {
+        await _montar(tester, tamano,
+            CodigosRespaldoNuevosScreen(codigos: List.generate(10, (i) => 'ABCDE-FGH${i}J')));
+        expect(find.text('Continuar'), findsOneWidget);
+      });
+
+      testWidgets('recuperar contraseña', (tester) async {
+        await _montar(tester, tamano, const RecuperarPasswordScreen(), sesion: _Sesion.anonima);
+        expect(find.text('Enviar enlace'), findsOneWidget);
+      });
+
+      testWidgets('restablecer contraseña', (tester) async {
+        await _montar(tester, tamano, RestablecerPasswordScreen(token: 't', alTerminar: () {}), sesion: _Sesion.anonima);
+        expect(find.text('Guardar contraseña'), findsOneWidget);
+      });
+
+      testWidgets('invitación: crear la primera contraseña', (tester) async {
+        await _montar(tester, tamano, RestablecerPasswordScreen(token: 't', esInvitacion: true, alTerminar: () {}),
+            sesion: _Sesion.anonima);
+        expect(find.text('Bienvenido: crea tu contraseña'), findsOneWidget);
       });
 
       testWidgets('catálogo', (tester) async {
         await _montar(tester, tamano, const CatalogScreen());
-        expect(find.text('Teclado mecánico'), findsOneWidget);
+        expect(find.text('Teclado mecánico'), findsWidgets); // en el carrusel de destacados y en la cuadrícula
+        expect(find.byKey(const Key('carrusel-destacados')), findsOneWidget);
       });
 
       testWidgets('carrito', (tester) async {
         await _montar(tester, tamano, const CartScreen());
-        expect(find.text('Confirmar pedido'), findsOneWidget);
+        expect(find.text('Confirmar y facturar'), findsOneWidget);
       });
 
       testWidgets('confirmación', (tester) async {
         await _montar(tester, tamano, OrderConfirmationScreen(pedido: _pedido));
         expect(find.byKey(const Key('total-pedido')), findsOneWidget);
       });
+
+      testWidgets('seguridad de la cuenta', (tester) async {
+        await _montar(tester, tamano, const SeguridadScreen());
+        expect(find.text('Verificación en dos pasos'), findsOneWidget);
+        expect(find.text('Cambiar contraseña'), findsOneWidget);
+      });
+
+      testWidgets('usuarios', (tester) async {
+        await _montar(tester, tamano, const UsuariosScreen());
+        expect(find.text('Usuarios'), findsWidgets);
+        expect(find.textContaining('José Alejandro'), findsOneWidget);
+        expect(find.text('Invitación pendiente'), findsOneWidget);
+      });
+
+      testWidgets('formulario de usuario', (tester) async {
+        await _montar(tester, tamano, const Scaffold(body: UsuarioFormDialog()));
+        expect(find.text('Nuevo usuario'), findsOneWidget);
+        expect(find.text('+502 '), findsOneWidget);
+      });
+      testWidgets('bitácora de accesos', (tester) async {
+        await _montar(tester, tamano, const BitacoraScreen());
+        expect(find.text('Bitácora de accesos'), findsOneWidget);
+      });
+
+      // ---------- ERP ----------
+
+      testWidgets('barra de navegación', (tester) async {
+        await _montar(tester, tamano, const PanelScreen());
+        if (tamano.width >= 1240) {
+          // Escritorio: las áreas están en la barra y cada una despliega sus módulos.
+          expect(find.byTooltip('Contabilidad'), findsOneWidget);
+          await tester.tap(find.byTooltip('Ventas'));
+          await tester.pumpAndSettle();
+          expect(find.byType(PopupMenuItem<Modulo>), findsNWidgets(4));
+          await tester.sendKeyEvent(LogicalKeyboardKey.escape); // cierra el submenú
+          await tester.pumpAndSettle();
+          // Los reportes tienen su propia área en la barra.
+          await tester.ensureVisible(find.byTooltip('Reportes')); // con letras anchas la barra se desplaza
+          await tester.pumpAndSettle();
+          await tester.tap(find.byTooltip('Reportes'));
+          await tester.pumpAndSettle();
+          expect(find.byType(PopupMenuItem<Modulo>), findsNWidgets(2));
+          expect(find.text('Pipeline y pronóstico'), findsWidgets);
+        } else {
+          // Tablet y celular: botón de menú con un panel lateral agrupado por área.
+          await tester.tap(find.byTooltip('Menú'));
+          await tester.pumpAndSettle();
+          expect(find.text('VENTAS'), findsOneWidget);
+          // El panel es una lista: en pantallas chicas hay que desplazarse para llegar al área de reportes.
+          await tester.scrollUntilVisible(find.text('REPORTES'), 150, scrollable: find.byType(Scrollable).last);
+          await tester.scrollUntilVisible(find.text('Pipeline y pronóstico'), 150, scrollable: find.byType(Scrollable).last);
+          expect(find.text('Reportes de ventas'), findsWidgets);
+        }
+      });
+
+      testWidgets('barra de navegación del vendedor: módulos directos', (tester) async {
+        await _montar(tester, tamano, const ClientesScreen(), rol: 'VENDEDOR');
+        if (tamano.width >= 1000) {
+          // Pocos módulos: van uno al lado del otro, sin submenú de área.
+          for (final descripcion in [
+            'Productos para vender',
+            'Facturas emitidas',
+            'Por día, producto, vendedor y cliente',
+            'Forecast según la probabilidad de cierre de cada etapa',
+          ]) {
+            expect(find.byTooltip(descripcion), findsOneWidget);
+          }
+          expect(find.byType(PopupMenuButton<Modulo>), findsNothing);
+        } else {
+          expect(find.byTooltip('Menú'), findsOneWidget);
+        }
+      });
+
+      testWidgets('pipeline y pronóstico', (tester) async {
+        await _montar(tester, tamano, const PronosticoScreen());
+        expect(find.text('Pipeline y pronóstico'), findsOneWidget);
+        expect(find.text('Pronóstico del período'), findsOneWidget);
+        expect(find.text(formatearMoneda(1444913.56)), findsWidgets);
+        expect(find.text('Embudo del pipeline'), findsOneWidget);
+        expect(find.text('Tendencia por día'), findsOneWidget);
+
+        // El administrador edita las probabilidades.
+        await tester.scrollUntilVisible(find.text('Editar'), 300, scrollable: find.byType(Scrollable).first);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Editar'));
+        await tester.pumpAndSettle();
+        expect(find.text('Probabilidad de cierre'), findsOneWidget);
+        await tester.tap(find.text('Guardar'));
+        await tester.pumpAndSettle();
+        expect(find.text('Se guardaron las probabilidades de cierre.'), findsOneWidget);
+      });
+
+      testWidgets('pronóstico del vendedor: sin tabla por vendedor ni edición', (tester) async {
+        await _montar(tester, tamano, const PronosticoScreen(), rol: 'VENDEDOR');
+        expect(find.text('Mi pipeline y pronóstico'), findsOneWidget);
+        expect(find.text('Editar'), findsNothing);
+        expect(find.text('Pronóstico por vendedor'), findsNothing);
+      });
+
+      testWidgets('pipeline de ventas', (tester) async {
+        await _montar(tester, tamano, const PipelineScreen());
+        expect(find.text('Pipeline de ventas'), findsOneWidget);
+        if (tamano.width >= 900) {
+          expect(find.text('Despachar'), findsOneWidget);   // la tarjeta en "Autorizado" que le toca al usuario
+          expect(find.text('En camino'), findsWidgets);     // encabezado de columna
+        } else {
+          expect(find.text('Marcar revisado'), findsOneWidget); // en celular se ve la etapa "Nuevo"
+        }
+      });
+
+      testWidgets('carrito con datos de entrega', (tester) async {
+        await _montar(tester, tamano, const CartScreen(), rol: 'VENDEDOR');
+        expect(find.byKey(const Key('campo-departamento')), findsOneWidget);
+        expect(find.text('Primero elige el departamento'), findsOneWidget);
+        expect(find.textContaining('Completa la dirección'), findsOneWidget);
+      });
+
+      testWidgets('panel de inicio', (tester) async {
+        await _montar(tester, tamano, const PanelScreen());
+        expect(find.text('Ventas de hoy'), findsOneWidget);
+        expect(find.text('Productos por reabastecer'), findsOneWidget);
+      });
+
+      testWidgets('clientes', (tester) async {
+        await _montar(tester, tamano, const ClientesScreen());
+        expect(find.text('Consumidor Final'), findsOneWidget);
+      });
+
+      testWidgets('formulario de cliente', (tester) async {
+        await _montar(tester, tamano,
+            Scaffold(body: TerceroFormDialog<Cliente>.cliente(guardar: (_) async => throw UnimplementedError())));
+        expect(find.text('Nuevo cliente'), findsOneWidget);
+      });
+
+      testWidgets('ventas', (tester) async {
+        await _montar(tester, tamano, const VentasScreen());
+        expect(find.textContaining('A-1001'), findsWidgets);
+      });
+
+      testWidgets('factura de una venta', (tester) async {
+        await _montar(tester, tamano, const VentaDetalleScreen(numero: 1234));
+        expect(find.byKey(const Key('total-pedido')), findsOneWidget);
+        expect(find.text('IVA 12 %'), findsOneWidget);
+        expect(find.text('Etapas de la venta'), findsOneWidget);
+        expect(find.textContaining('Guía 4521'), findsOneWidget);
+        expect(find.text('Enviar (en camino)'), findsOneWidget); // ADMIN puede dar el siguiente paso
+      });
+
+      testWidgets('inventario', (tester) async {
+        await _montar(tester, tamano, const InventarioScreen());
+        expect(find.textContaining('reabastecer'), findsWidgets);
+      });
+
+      testWidgets('kardex', (tester) async {
+        await _montar(tester, tamano, const KardexScreen(productoId: 3));
+        expect(find.textContaining('Compra'), findsWidgets);
+      });
+
+      testWidgets('ajuste de inventario', (tester) async {
+        await _montar(tester, tamano,
+            Scaffold(body: AjusteDialog(producto: ProductoInventario.fromJson(_productoInv(1)))));
+        expect(find.text('Registrar ajuste'), findsOneWidget);
+      });
+
+      testWidgets('proveedores', (tester) async {
+        await _montar(tester, tamano, const ProveedoresScreen());
+        expect(find.textContaining('3344556-7'), findsWidgets);
+      });
+
+      testWidgets('órdenes de compra', (tester) async {
+        await _montar(tester, tamano, const OrdenesScreen());
+        expect(find.text('Pendiente'), findsWidgets);
+      });
+
+      testWidgets('detalle de orden de compra', (tester) async {
+        await _montar(tester, tamano, const OrdenDetalleScreen(numero: 7));
+        expect(find.text('Recibir mercadería'), findsOneWidget);
+      });
+
+      testWidgets('nueva orden de compra', (tester) async {
+        await _montar(tester, tamano, const NuevaOrdenScreen());
+        expect(find.text('Crear orden'), findsOneWidget);
+      });
+
+      testWidgets('libro diario', (tester) async {
+        await _montar(tester, tamano, const LibroDiarioScreen());
+        expect(find.text('Sumas iguales'), findsWidgets);
+      });
+
+      testWidgets('nueva partida', (tester) async {
+        await _montar(tester, tamano, const NuevaPartidaScreen());
+        expect(find.text('Registrar partida'), findsOneWidget);
+      });
+
+      testWidgets('catálogo de cuentas y libro mayor', (tester) async {
+        await _montar(tester, tamano, const CuentasScreen());
+        expect(find.textContaining('Bancos'), findsWidgets);
+        await _montar(tester, tamano, LibroMayorScreen(cuenta: CuentaContable.fromJson(_cuentas[0])));
+        expect(find.text('Saldo final'), findsOneWidget);
+      });
+
+      testWidgets('ficha del producto', (tester) async {
+        await _montar(tester, tamano, ProductoDetalleScreen(producto: _productos[0]));
+        expect(find.text('Especificaciones técnicas'), findsOneWidget);
+        expect(find.text('1 año de garantía'), findsOneWidget);
+        expect(find.byKey(const Key('carrusel-imagenes')), findsOneWidget);
+        expect(find.text('1 / 5'), findsOneWidget);
+        await tester.tap(find.byIcon(Icons.chevron_right).first);
+        await tester.pumpAndSettle();
+        expect(find.text('2 / 5'), findsOneWidget);
+        // Avance automático: a los 4 segundos pasa sola a la siguiente foto.
+        await tester.pump(const Duration(seconds: 4));
+        await tester.pumpAndSettle();
+        expect(find.text('3 / 5'), findsOneWidget);
+      });
+
+      testWidgets('productos (CRUD)', (tester) async {
+        await _montar(tester, tamano, const ProductosScreen());
+        expect(find.text('Productos'), findsWidgets);
+        expect(find.text('2/5'), findsWidgets);
+        expect(find.text('Inactivo'), findsOneWidget);
+      });
+
+      testWidgets('galería de fotos del producto', (tester) async {
+        await _montar(tester, tamano,
+            Scaffold(body: GaleriaDialog(producto: ProductoInventario.fromJson({..._productoInv(1), 'imagenes': [1, 2, 3, 4, 5]}))));
+        expect(find.text('Principal'), findsOneWidget);
+        expect(find.text('Máximo 5 fotos'), findsOneWidget);
+      });
+
+      testWidgets('formulario de producto con ficha', (tester) async {
+        await _montar(tester, tamano, Scaffold(body: ProductoFormDialog(producto: ProductoInventario.fromJson({
+          ..._productoInv(1),
+          'marca': 'KeyForge',
+          'categoria': 'Periféricos',
+          'descripcion': 'Descripción larga',
+          'garantiaMeses': 12,
+          'especificaciones': [
+            {'nombre': 'Conexión', 'valor': 'USB-C'},
+          ],
+        }))));
+        expect(find.text('Especificaciones técnicas'), findsOneWidget);
+        expect(find.text('USB-C'), findsWidgets);
+      });
+
+      testWidgets('reporte de ventas', (tester) async {
+        await tester.runAsync(precargarMapa); // el mapa se lee de un asset (E/S real)
+        await _montar(tester, tamano, const ReporteVentasScreen());
+        expect(find.text('Ticket promedio'), findsOneWidget);
+        await tester.scrollUntilVisible(find.byKey(const Key('mapa-guatemala')), 300,
+            scrollable: find.byType(Scrollable).first);
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('mapa-guatemala')), findsOneWidget);
+        expect(find.textContaining('Combo teclado y mouse'), findsOneWidget); // producto top del departamento líder
+        expect(find.textContaining('vs. período anterior'), findsWidgets);
+        for (final pestana in ['Vendedores', 'Clientes', 'Formas de pago']) {
+          await tester.ensureVisible(find.text(pestana));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text(pestana));
+          await tester.pumpAndSettle();
+        }
+        expect(find.textContaining('Transferencia'), findsWidgets);
+      });
+
+      testWidgets('estados financieros', (tester) async {
+        await _montar(tester, tamano, const ReportesScreen());
+        expect(find.textContaining('Pérdida neta'), findsOneWidget);
+        for (final (pestana, esperado) in [('Balance general', 'ACTIVO'), ('Comprobación', 'Bancos con un nombre')]) {
+          await tester.ensureVisible(find.text(pestana));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text(pestana));
+          await tester.pumpAndSettle();
+          expect(find.textContaining(esperado), findsWidgets);
+        }
+      });
     });
   }
+
+  testWidgets('pipeline: arrastrar una tarjeta a la siguiente etapa la avanza', (tester) async {
+    await _montar(tester, const Size(1920, 1080), const PipelineScreen());
+
+    Future<void> arrastrar(String tarjeta, String columna) async {
+      final origen = tester.getCenter(find.text(tarjeta));
+      final destino = Offset(tester.getCenter(find.text(columna).first).dx, origen.dy + 200);
+      final gesto = await tester.startGesture(origen, kind: PointerDeviceKind.mouse);
+      await gesto.moveBy(const Offset(20, 0));
+      await tester.pump();
+      expect(find.text(tarjeta), findsNWidgets(2)); // la tarjeta flotante y la original (atenuada)
+      await gesto.moveTo(destino);
+      await tester.pump();
+      if (columna == 'Despachado') {
+        expect(find.byKey(const Key('zona-soltar')), findsOneWidget); // se resalta la columna válida
+      } else {
+        expect(find.textContaining('Solo puede pasar a "Despachado"'), findsOneWidget);
+      }
+      await gesto.up();
+      await tester.pumpAndSettle();
+    }
+
+    // A una etapa que no es la siguiente: se rechaza y no se pide confirmación.
+    await arrastrar('A-2002', 'En camino');
+    expect(find.byType(AlertDialog), findsNothing);
+
+    // A la siguiente etapa: pide la nota y avanza.
+    await arrastrar('A-2002', 'Despachado');
+    expect(find.text('Despachar · A-2002'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Despachar').last);
+    await tester.pumpAndSettle();
+    expect(find.text('La venta A-2002 pasó a Despachado.'), findsOneWidget);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows)); // con mouse el arrastre empieza de inmediato
 }

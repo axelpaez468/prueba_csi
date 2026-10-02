@@ -1,6 +1,6 @@
 # Uso:  cp .env.example .env   (y cambiar los valores)
 #       docker compose up --build
-# Frontend: http://localhost:8080   API: http://localhost:5080
+# Frontend: http://localhost:8080   API: http://localhost:5080   Correos de prueba: http://localhost:8025
 name: pedidos
 
 # Endurecimiento común: ningún proceso puede ganar privilegios (setuid) dentro del contenedor.
@@ -43,12 +43,28 @@ services:
       # La API usa el login de mínimos privilegios, no "sa".
       ConnectionStrings__Default: "Server=db,1433;Database=${DB_NAME:-PedidosDb};User Id=${APP_DB_USER:-pedidos_app};Password=${APP_DB_PASSWORD};Encrypt=True;TrustServerCertificate=True"
       Jwt__Key: ${JWT_KEY:?Defina JWT_KEY en .env (mínimo 32 caracteres)}
+      # Cifra los secretos del 2FA y firma los códigos/enlaces (HMAC).
+      Seguridad__ClaveMaestra: ${SEGURIDAD_CLAVE_MAESTRA:?Defina SEGURIDAD_CLAVE_MAESTRA en .env (32 bytes en Base64)}
       Cors__AllowedOrigins: ${FRONTEND_ORIGIN:-http://localhost:8080}
+      # Enlaces de los correos (recuperación de contraseña).
+      Frontend__UrlPublica: ${FRONTEND_ORIGIN:-http://localhost:8080}
+      # Datos de demostración (productos, clientes y meses de ventas). Solo la primera vez; false para no generarlos.
+      Demo__Generar: ${DEMO_GENERAR:-true}
+      Demo__Dias: ${DEMO_DIAS:-120}
+      # Por defecto Mailpit (bandeja local). Para enviar correos reales, defina CORREO_* en .env (ver .env.example).
+      Correo__Host: ${CORREO_HOST:-mailpit}
+      Correo__Puerto: ${CORREO_PUERTO:-1025}
+      Correo__Tls: ${CORREO_TLS:-None}
+      Correo__Usuario: ${CORREO_USUARIO:-}
+      Correo__Password: ${CORREO_PASSWORD:-}
+      Correo__Remitente: ${CORREO_REMITENTE:-no-responder@pedidos.local}
     ports:
       - "${API_PORT:-5080}:8080"
     depends_on:
       db:
         condition: service_healthy
+      mailpit:
+        condition: service_started
     # Sistema de archivos de solo lectura y sin capacidades de Linux: si alguien lograra ejecutar código
     # en el contenedor, no podría modificar binarios ni escalar privilegios. Topes de recursos: un pico de
     # carga no puede dejar sin memoria/CPU al resto del host.
@@ -60,6 +76,20 @@ services:
     cpus: 1.0
     pids_limit: 200
     restart: unless-stopped
+
+  # Bandeja de correo de pruebas (gratuita, de código abierto): atrapa los correos
+  # y los muestra en http://localhost:8025. No envía nada a internet.
+  mailpit:
+    <<: *seguridad
+    image: axllent/mailpit:v1.31
+    environment:
+      MP_MAX_MESSAGES: 500
+    ports:
+      - "8025:8025"
+    cap_drop: [ALL]
+    mem_limit: 128m
+    restart: unless-stopped
+    # El puerto SMTP (1025) no se publica: solo la API envía correos, por la red interna.
 
   frontend:
     <<: *seguridad

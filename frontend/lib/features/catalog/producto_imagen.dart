@@ -1,16 +1,21 @@
 import 'package:flutter/material.dart';
 
+import '../../core/config/app_config.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/models/producto.dart';
 
-/// Foto representativa del producto según su tipo (teclado, mouse, monitor...).
-/// Las fotos van incluidas en la app (assets/productos, créditos en CREDITOS.md);
-/// si un producto no coincide con ningún tipo, se muestra un ícono genérico.
+/// Foto del producto: la principal que se subió a la API. Si el producto no tiene fotos (o no cargan),
+/// se usa una ilustración incluida en la app según su tipo (assets/productos, créditos en CREDITOS.md)
+/// o, si no coincide con ningún tipo, un ícono genérico.
 class ProductoImagen extends StatelessWidget {
-  const ProductoImagen({super.key, required this.producto, this.tamanoIcono = 40});
+  const ProductoImagen({super.key, required this.producto, this.tamanoIcono = 40, this.imagenId, this.ajuste = BoxFit.cover});
 
   final Producto producto;
   final double tamanoIcono;
+
+  /// Una foto concreta de la galería; por defecto, la principal.
+  final int? imagenId;
+  final BoxFit ajuste;
 
   static const _tipos = <(String, String, IconData)>[
     ('teclado', 'teclado', Icons.keyboard_outlined),
@@ -32,18 +37,30 @@ class ProductoImagen extends StatelessWidget {
   Widget build(BuildContext context) {
     final (asset, icono) = _resolver(producto.nombre);
     final respaldo = ColoredBox(
-      color: const Color(0xFFE8EEF7),
+      color: const Color(0xFFE3EAFB),
       child: Center(child: Icon(icono, size: tamanoIcono, color: AppColors.primary.withValues(alpha: 0.75))),
     );
-    if (asset == null) return respaldo;
+    final sinStock = !producto.disponible;
+    final id = imagenId ?? producto.imagenId;
+    final local = asset == null
+        ? respaldo
+        : Image.asset(
+            asset,
+            fit: BoxFit.cover,
+            color: sinStock ? Colors.grey : null,
+            colorBlendMode: sinStock ? BlendMode.saturation : null,
+            errorBuilder: (_, _, _) => respaldo,
+          );
+    if (id == null || !AppConfig.isValid) return local;
 
-    return Image.asset(
-      asset,
-      fit: BoxFit.cover,
+    return Image.network(
+      AppConfig.urlImagen(producto.id, id),
+      fit: ajuste,
       // Sin stock: la foto se ve en escala de grises.
-      color: producto.disponible ? null : Colors.grey,
-      colorBlendMode: producto.disponible ? null : BlendMode.saturation,
-      errorBuilder: (_, _, _) => respaldo,
+      color: sinStock ? Colors.grey : null,
+      colorBlendMode: sinStock ? BlendMode.saturation : null,
+      loadingBuilder: (_, child, progreso) => progreso == null ? child : ColoredBox(color: const Color(0xFFE3EAFB), child: child),
+      errorBuilder: (_, _, _) => local,
     );
   }
 }

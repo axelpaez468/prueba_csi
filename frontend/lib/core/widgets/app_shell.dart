@@ -79,11 +79,15 @@ class PageBody extends StatelessWidget {
 
 /// Encabezado de página: título, subtítulo y acciones opcionales a la derecha.
 class PageHeader extends StatelessWidget {
-  const PageHeader({super.key, required this.titulo, this.subtitulo, this.acciones = const []});
+  const PageHeader({super.key, required this.titulo, this.subtitulo, this.acciones = const [], this.area, this.iconoArea});
 
   final String titulo;
   final String? subtitulo;
   final List<Widget> acciones;
+
+  /// Área del ERP a la que pertenece la pantalla ("Ventas", "Contabilidad"...), sobre el título.
+  final String? area;
+  final IconData? iconoArea;
 
   @override
   Widget build(BuildContext context) {
@@ -92,7 +96,16 @@ class PageHeader extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(titulo, style: theme.textTheme.headlineSmall),
+        if (area != null) ...[
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            if (iconoArea != null) ...[Icon(iconoArea, size: 14, color: AppColors.primary), const SizedBox(width: 6)],
+            Text(area!.toUpperCase(),
+                style: theme.textTheme.labelSmall?.copyWith(
+                    color: AppColors.primary, letterSpacing: 1.2, fontWeight: FontWeight.w700)),
+          ]),
+          const SizedBox(height: 6),
+        ],
+        Text(titulo, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800, letterSpacing: -0.5)),
         if (subtitulo != null) ...[
           const SizedBox(height: 4),
           Text(subtitulo!, style: theme.textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary)),
@@ -149,8 +162,60 @@ class StatusPill extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (icono != null) ...[Icon(icono, size: 14, color: color), const SizedBox(width: 4)],
-          Text(texto, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600)),
+          // Flexible: en una columna angosta (p. ej. una tabla) el texto se recorta en vez de desbordar.
+          Flexible(
+            child: Text(texto,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600)),
+          ),
         ],
+      ),
+    );
+  }
+}
+
+/// Casilla con texto clicable. Se usa en lugar de CheckboxListTile dentro de tarjetas con fondo propio,
+/// donde el efecto de toque del ListTile quedaría oculto.
+class Casilla extends StatelessWidget {
+  const Casilla({super.key, required this.valor, required this.alCambiar, required this.texto, this.detalle});
+
+  final bool valor;
+  final ValueChanged<bool>? alCambiar;
+  final String texto;
+  final String? detalle;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: alCambiar == null ? null : () => alCambiar!(!valor),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox.square(
+              dimension: 32,
+              child: Checkbox(value: valor, onChanged: alCambiar == null ? null : (v) => alCambiar!(v ?? false)),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(texto, style: theme.textTheme.bodyMedium),
+                    if (detalle != null)
+                      Text(detalle!, style: theme.textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -158,13 +223,14 @@ class StatusPill extends StatelessWidget {
 
 /// Aviso de error o información dentro de una página.
 class InlineBanner extends StatelessWidget {
-  const InlineBanner.error(this.mensaje, {super.key})
+  const InlineBanner.error(this.mensaje, {super.key, this.alReintentar})
       : color = AppColors.danger,
         fondo = AppColors.dangerBg,
         icono = Icons.error_outline;
 
   const InlineBanner.info(this.mensaje, {super.key})
-      : color = AppColors.warning,
+      : alReintentar = null,
+        color = AppColors.warning,
         fondo = AppColors.warningBg,
         icono = Icons.info_outline;
 
@@ -172,6 +238,9 @@ class InlineBanner extends StatelessWidget {
   final Color color;
   final Color fondo;
   final IconData icono;
+
+  /// Si se indica, muestra "Reintentar" (en escritorio no hay gesto de deslizar para recargar).
+  final VoidCallback? alReintentar;
 
   @override
   Widget build(BuildContext context) {
@@ -188,6 +257,19 @@ class InlineBanner extends StatelessWidget {
           Icon(icono, color: color, size: 20),
           const SizedBox(width: 10),
           Expanded(child: Text(mensaje, style: TextStyle(color: color, fontWeight: FontWeight.w500))),
+          if (alReintentar != null) ...[
+            const SizedBox(width: 8),
+            TextButton.icon(
+              onPressed: alReintentar,
+              style: TextButton.styleFrom(
+                foregroundColor: color,
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+              ),
+              icon: const Icon(Icons.refresh, size: 18),
+              label: const Text('Reintentar'),
+            ),
+          ],
         ],
       ),
     );
@@ -215,7 +297,7 @@ class EmptyState extends StatelessWidget {
             Container(
               width: 72,
               height: 72,
-              decoration: const BoxDecoration(color: Color(0xFFE8EDF4), shape: BoxShape.circle),
+              decoration: const BoxDecoration(color: Color(0xFFE3EAFB), shape: BoxShape.circle),
               child: Icon(icono, size: 34, color: AppColors.primary),
             ),
             const SizedBox(height: 16),

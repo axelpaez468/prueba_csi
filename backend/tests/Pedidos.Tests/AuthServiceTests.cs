@@ -1,8 +1,5 @@
 using System.IdentityModel.Tokens.Jwt;
-using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.Options;
 using Pedidos.Api.Security;
-using Pedidos.Api.Services;
 using Pedidos.Tests.Infra;
 
 namespace Pedidos.Tests;
@@ -10,84 +7,96 @@ namespace Pedidos.Tests;
 public class AuthServiceTests : IDisposable
 {
     private readonly TestDb _testDb = new();
-    private readonly LoginThrottle _throttle =
-        new(new MemoryCache(new MemoryCacheOptions { SizeLimit = 1000 }), TimeProvider.System);
+    private readonly ServiciosSeguridad _s = new();
 
     public void Dispose() => _testDb.Dispose();
 
-    private AuthService CrearServicio()
-    {
-        var options = Options.Create(new JwtOptions { Key = new string('k', JwtOptions.MinKeyBytes) });
-        return new AuthService(_testDb.CrearContexto(), new TokenService(options, TimeProvider.System), _throttle);
-    }
+    private Task<Pedidos.Api.Services.LoginResultado> Login(string email, string password, string? tokenDispositivo = null) =>
+        _s.Auth(_testDb.CrearContexto()).LoginAsync(email, password, tokenDispositivo, _s.Contexto, default);
 
     [Fact]
-    public async Task Login_ConCredencialesValidas_DevuelveTokenConRolYExpiracion()
+    public async Task Login_ConCorreoYContrasenaValidos_DevuelveTokenConRolCorreoYVersionDeSesion()
     {
-        var resultado = await CrearServicio().LoginAsync("admin", TestDb.PasswordDePrueba, default);
+        var sesion = await _s.EntrarAsync(_testDb, TestDb.EmailVendedor, TestDb.PasswordDePrueba);
 
-        Assert.NotNull(resultado.Sesion);
-        var token = new JwtSecurityTokenHandler().ReadJwtToken(resultado.Sesion.Token);
-        Assert.Equal("ADMIN", token.Claims.Single(c => c.Type == JwtClaims.Role).Value);
-        Assert.Equal(TestDb.AdminId.ToString(), token.Claims.Single(c => c.Type == JwtClaims.UserId).Value);
+        Assert.NotNull(sesion);
+        var token = new JwtSecurityTokenHandler().ReadJwtToken(sesion.Token);
+        Assert.Equal("VENDEDOR", token.Claims.Single(c => c.Type == JwtClaims.Role).Value);
+        Assert.Equal(TestDb.EmailVendedor, token.Claims.Single(c => c.Type == JwtClaims.Email).Value);
+        Assert.Equal("0", token.Claims.Single(c => c.Type == JwtClaims.VersionSesion).Value);
         Assert.True(token.ValidTo > DateTime.UtcNow);
     }
 
-    [Theory]
-    [InlineData("admin", "clave-incorrecta")]
-    [InlineData("no-existe", TestDb.PasswordDePrueba)]
-    public async Task Login_ConCredencialesInvalidas_NoEmiteToken(string usuario, string password)
+    [Fact]
+    public async Task Login_IgnoraMayusculasYEspaciosEnElCorreo()
     {
-        var resultado = await CrearServicio().LoginAsync(usuario, password, default);
+        Assert.NotNull(await _s.EntrarAsync(_testDb, "  VENDEDOR@Pedidos.TEST ", TestDb.PasswordDePrueba));
+    }
+
+    [Theory]
+    [InlineData(TestDb.EmailAdmin, "clave-incorrecta")]
+    [InlineData("no-existe@pedidos.test", TestDb.PasswordDePrueba)]
+    public async Task Login_ConCredencialesInvalidas_NoEmiteToken_YQuedaEnLaBitacora(string email, string password)
+    {
+        var resultado = await Login(email, password);
 
         Assert.Null(resultado.Sesion);
-        Assert.Null(resultado.BloqueadoPor);
+        Assert.Null(resultado.Desafio);
+        await using var db = _testDb.CrearContexto();
+        Assert.Contains(db.BitacoraAccesos, r => r.Email == email && r.Evento == "LOGIN_FALLIDO" && !r.Exito && r.Ip == ServiciosSeguridad.Ip);
     }
 
     [Theory]
     [InlineData("' OR '1'='1", "' OR '1'='1")]
-    [InlineData("admin' --", "x")]
-    [InlineData("admin'; DROP TABLE Usuarios; --", "x")]
-    [InlineData("' UNION SELECT Id, Username, PasswordHash, Rol FROM Usuarios --", "x")]
-    public async Task Login_ConInyeccionSql_NoAutentica_YNoAlteraLaBaseDeDatos(string usuario, string password)
+    [InlineData("admin@pedidos.test' --", "x")]
+    [InlineData("x'; DROP TABLE Usuarios; --", "x")]
+    [InlineData("' UNION SELECT Id, Email, PasswordHash, Rol FROM Usuarios --", "x")]
+    public async Task Login_ConInyeccionSql_NoAutentica_YNoAlteraLaBaseDeDatos(string email, string password)
     {
-        var resultado = await CrearServicio().LoginAsync(usuario, password, default);
+        var resultado = await Login(email, password);
 
         Assert.Null(resultado.Sesion);
         await using var db = _testDb.CrearContexto();
-        Assert.Equal(3, db.Usuarios.Count()); // la tabla sigue intacta
+        Assert.Equal(3, db.Usuarios.Count());
     }
 
     [Fact]
     public async Task Login_TrasVariosFallos_BloqueaLaCuentaAunqueLaContrasenaSeaCorrecta()
     {
-        var servicio = CrearServicio();
         for (var i = 0; i < LoginThrottle.FallosPermitidos; i++)
-            await servicio.LoginAsync("vendedor", "incorrecta", default);
+            await Login(TestDb.EmailVendedor, "incorrecta");
 
-        var resultado = await servicio.LoginAsync("vendedor", TestDb.PasswordDePrueba, default);
+        var resultado = await Login(TestDb.EmailVendedor, TestDb.PasswordDePrueba);
 
         Assert.Null(resultado.Sesion);
         Assert.NotNull(resultado.BloqueadoPor);
-        Assert.True(resultado.BloqueadoPor <= LoginThrottle.DuracionBloqueo);
+
+        // Pasado el bloqueo vuelve a funcionar.
+        _s.Reloj.Advance(LoginThrottle.DuracionBloqueo + TimeSpan.FromSeconds(1));
+        Assert.NotNull(await _s.EntrarAsync(_testDb, TestDb.EmailVendedor, TestDb.PasswordDePrueba));
     }
 
     [Fact]
-    public async Task Login_ExitosoAntesDelLimite_ReiniciaElContadorDeFallos()
+    public async Task Login_DesdeDispositivoNuevo_AvisaPorCorreoSoloLaPrimeraVez()
     {
-        var servicio = CrearServicio();
-        for (var i = 0; i < LoginThrottle.FallosPermitidos - 1; i++)
-            await servicio.LoginAsync("vendedor", "incorrecta", default);
-        Assert.NotNull((await servicio.LoginAsync("vendedor", TestDb.PasswordDePrueba, default)).Sesion);
+        // El segundo ingreso usa el dispositivo de confianza para no pedir otra vez el código de la app.
+        var primera = await _s.EntrarAsync(_testDb, TestDb.EmailVendedor, TestDb.PasswordDePrueba, confiar: true);
+        Assert.NotNull(await _s.EntrarAsync(_testDb, TestDb.EmailVendedor, TestDb.PasswordDePrueba, primera!.TokenDispositivo));
 
-        // Un nuevo fallo no bloquea: el contador volvió a cero con el login exitoso.
-        await servicio.LoginAsync("vendedor", "incorrecta", default);
-        Assert.NotNull((await servicio.LoginAsync("vendedor", TestDb.PasswordDePrueba, default)).Sesion);
+        var avisos = _s.Correo.Enviados.Where(m => m.Para == TestDb.EmailVendedor && m.Asunto.Contains("Nuevo inicio")).ToList();
+        Assert.Single(avisos);
+        Assert.Contains("Chrome en Windows", avisos[0].Texto);
     }
 
     [Fact]
     public void JwtOptions_ConClaveCorta_FallaAlValidar()
     {
         Assert.Throws<InvalidOperationException>(() => new JwtOptions { Key = "clave-secreta" }.Validar());
+    }
+
+    [Fact]
+    public void SeguridadOptions_SinClaveMaestraDe32Bytes_FallaAlValidar()
+    {
+        Assert.Throws<InvalidOperationException>(() => new SeguridadOptions { ClaveMaestra = "corta" }.Validar());
     }
 }

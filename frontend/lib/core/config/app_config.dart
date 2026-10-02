@@ -7,4 +7,8 @@ class AppConfig {
   static const String apiUrl = String.fromEnvironment('API_URL');
 
   static bool get isValid => Uri.tryParse(apiUrl)?.hasScheme ?? false;
+
+  /// Foto de un producto (endpoint público de la API; se puede guardar en caché).
+  static String urlImagen(int productoId, int imagenId) =>
+      '${apiUrl.endsWith('/') ? apiUrl.substring(0, apiUrl.length - 1) : apiUrl}/api/productos/$productoId/imagenes/$imagenId';
 }

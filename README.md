@@ -30,11 +30,13 @@ docker compose up --build
 |---|---|
 | Frontend | http://localhost:8080 |
 | API | http://localhost:5080 |
+| Bandeja de correos de prueba (Mailpit), si no se configura un SMTP real | http://localhost:8025 |
 
 - El primer build tarda bastante: descarga SQL Server (unos 1.5 GB), el SDK de .NET y Flutter.
 - La base de datos se crea sola. El contenedor `db` arranca SQL Server, ejecuta `db/init/init.sql` y solo entonces el *healthcheck* lo marca como sano. La API espera a ese estado (`depends_on: service_healthy`).
 - Los datos persisten en el volumen `mssql-data`. Para empezar de cero: `docker compose down -v`.
-- `JWT_KEY` debe tener al menos 32 caracteres; si no, la API no arranca. Para generarla: `openssl rand -base64 48`.
+- `JWT_KEY` debe tener al menos 32 caracteres, y `SEGURIDAD_CLAVE_MAESTRA` debe ser una clave de 32 bytes en Base64; si falta alguna, la API no arranca. Para generarlas: `openssl rand -base64 48` y `openssl rand -base64 32`.
+- Si ya tenías el volumen de una versión anterior y cambió `init.sql`, reinicia la base para que aplique la migración: `docker compose restart db`. El script es idempotente y no borra datos.
 
 ### Sin Docker (desarrollo)
 
@@ -44,12 +46,15 @@ docker compose up --build
 sqlcmd -S ".\SQLEXPRESS" -E -b -I -f 65001 -i db/init/init.sql -v DB_NAME=PedidosDb APP_DB_USER=pedidos_app APP_DB_PASSWORD="Cambiar-App-2026!"
 ```
 
+El script crea el esquema y los **datos semilla**: los 5 usuarios de la sección 2, 5 productos, el consumidor final y 2 clientes, 2 proveedores, el catálogo de 16 cuentas, las probabilidades del pipeline, el kardex inicial y la partida de apertura (cuadrada). Fuera de Docker las **fotos** semilla no se cargan, porque su ruta es la del contenedor: el script lo avisa y continúa, y se pueden subir desde la app. Los **datos de demostración** (unas 770 ventas en 120 días, compras, clientes y más productos) no están en el script: los genera la API al arrancar. En Docker vienen activados; sin Docker, se activan con `dotnet user-secrets set "Demo:Generar" "true" --project src/Pedidos.Api`.
+
 **API** (http://localhost:5080, con Swagger en `/swagger`). Los secretos van en *user-secrets*, fuera del repositorio:
 
 ```bash
 cd backend
 dotnet user-secrets set "Jwt:Key" "<clave aleatoria de 32+ caracteres>" --project src/Pedidos.Api
 dotnet user-secrets set "ConnectionStrings:Default" "Server=.\SQLEXPRESS;Database=PedidosDb;Trusted_Connection=True;TrustServerCertificate=True" --project src/Pedidos.Api
+dotnet user-secrets set "Seguridad:ClaveMaestra" "<32 bytes en Base64>" --project src/Pedidos.Api
 dotnet run --project src/Pedidos.Api --launch-profile http
 ```
 
@@ -66,13 +71,20 @@ flutter run -d chrome --web-port 8081 --dart-define=API_URL=http://localhost:508
 
 ## 2. Usuarios de prueba
 
-| Usuario | Contraseña | Rol | Puede |
-|---|---|---|---|
-| `vendedor` | `Vendedor123!` | VENDEDOR | Ver el catálogo, crear pedidos y ver **sus** pedidos |
-| `admin` | `Admin123!` | ADMIN | Ver el catálogo y **cualquier** pedido; no crea pedidos |
+| Correo | Contraseña | Rol | 2FA | Puede |
+|---|---|---|---|---|
+| `vendedor@pedidos.local` | `Vendedor123!` | VENDEDOR | Google Authenticator | Vender desde el catálogo (factura a un cliente o CF), clientes y **sus** ventas |
+| `admin@pedidos.local` | `AdminPedidos2026!` | ADMIN | Google Authenticator | Todos los módulos, usuarios y bitácora; no vende |
+| `bodega@pedidos.local` | `BodegaPedidos2026!` | BODEGA | Google Authenticator | Productos, existencias, ajustes, kardex y recepción de compras |
+| `compras@pedidos.local` | `ComprasPedidos2026!` | COMPRAS | Google Authenticator | Proveedores y órdenes de compra (crear y anular) |
+| `contador@pedidos.local` | `ContadorPedidos2026!` | CONTADOR | Google Authenticator | Catálogo de cuentas, partidas, libro mayor y estados financieros; consulta ventas, inventario y compras |
+
+El 2FA es obligatorio para todos: se configura con un QR en el primer ingreso.
+
+**Cómo entrar la primera vez (cualquier rol):** instala **Google Authenticator** en tu teléfono (gratis en Play Store o App Store). Después de la contraseña, el sistema muestra un **código QR**: escanéalo con la app (o escribe la clave que aparece debajo) y escribe el código de 6 dígitos que muestra la app. Al activarse aparecen **10 códigos de respaldo**: guárdalos, sirven si pierdes el teléfono. Desde entonces, cada inicio de sesión pide el código de la app (salvo que marques "Confiar en este dispositivo por 30 días").
 
 Productos semilla: 5, entre ellos el **Monitor 27" con stock 1**, para probar la concurrencia, y la **Webcam HD con stock 0**, que aparece deshabilitada en el catálogo.
-Son credenciales de prueba y están guardadas como hash BCrypt en `init.sql`.
+Son credenciales de prueba y están guardadas como hash BCrypt en `init.sql`. La contraseña del vendedor es anterior a la política nueva: si se cambia, la nueva debe cumplirla.
 
 ---
 
@@ -83,9 +95,16 @@ Son credenciales de prueba y están guardadas como hash BCrypt en `init.sql`.
 - **curl** (Git Bash, Linux o macOS):
 
 ```bash
-# Login (guarda el token)
-TOKEN=$(curl -s -X POST http://localhost:5080/api/auth/login -H "Content-Type: application/json" \
-  -d '{"username":"vendedor","password":"Vendedor123!"}' | sed -E 's/.*"token":"([^"]+)".*/\1/')
+# Login en dos pasos (2FA obligatorio). Paso 1: correo y contraseña devuelven un desafío
+# (en el primer ingreso también "uri"/"secreto" para registrar la cuenta en Google Authenticator).
+DESAFIO=$(curl -s -X POST http://localhost:5080/api/auth/login -H "Content-Type: application/json" \
+  -d '{"email":"vendedor@pedidos.local","password":"Vendedor123!"}' | sed -E 's/.*"desafio":"([^"]+)".*/\1/')
+# Paso 2: el código de 6 dígitos de la app devuelve el token.
+TOKEN=$(curl -s -X POST http://localhost:5080/api/auth/login/verificar -H "Content-Type: application/json" \
+  -d "{\"desafio\":\"$DESAFIO\",\"codigo\":\"<código de Google Authenticator>\"}" | sed -E 's/.*"token":"([^"]+)".*/\1/')
+
+# Recuperación de contraseña: el enlace llega a la bandeja de Mailpit
+curl -s -X POST http://localhost:5080/api/auth/recuperar -H "Content-Type: application/json" -d '{"email":"vendedor@pedidos.local"}'
 
 # Catálogo
 curl -i http://localhost:5080/api/productos -H "Authorization: Bearer $TOKEN"
@@ -111,23 +130,59 @@ for i in $(seq 1 10); do curl -s -o /dev/null -w "%{http_code}\n" -X POST http:/
 
 | Método | Ruta | Acceso | Respuestas |
 |---|---|---|---|
-| POST | `/api/auth/login` | Público (10 intentos/min por IP) | 200 `{ token, expiraEn, username, rol }` · 400 · 401 · 429 |
-| GET | `/api/productos` | Autenticado | 200 `[{ id, codigo, nombre, precio, stock }]` · 401 |
-| POST | `/api/pedidos` | VENDEDOR | 201 `{ numero, fecha, usuarioId, total, lineas[] }` · 400 · 401 · 403 |
-| GET | `/api/pedidos/{id}` | Dueño o ADMIN | 200 · 401 · 404 |
+| POST | `/api/auth/login` | Público (10 intentos/min por IP) | 200 `{ token, expiraEn, username, email, rol }` o, con 2FA, 200 `{ requiereSegundoFactor: true, desafio, metodo, destino }` · 400 · 401 · 429 |
+| POST | `/api/auth/login/verificar` | Público (con el desafío) | 200 sesión (+ `tokenDispositivo` si se pidió confiar en el dispositivo) · 401 código incorrecto · 400 desafío vencido |
+| POST | `/api/auth/recuperar` | Público (5 cada 15 min por IP) | 202, siempre la misma respuesta (no revela si el correo existe) |
+| POST | `/api/auth/restablecer` | Público (con el token del correo) | 200 · 400 enlace vencido o usado, o contraseña que no cumple la política |
+| GET/POST | `/api/cuenta/...` | Autenticado | Estado de seguridad, cambio de contraseña, activar/desactivar Google Authenticator, códigos de respaldo, accesos propios |
+| GET | `/api/admin/bitacora` | ADMIN | Últimos 100 eventos de seguridad de todos los usuarios |
+| GET/POST/PUT/DELETE | `/api/admin/usuarios[/{id}]` | ADMIN | Listar (`?buscar=`), crear (envía invitación), editar, `/activar`, `/desactivar`, `/invitacion`, eliminar (solo sin pedidos) · 400 validación · 403 no admin · 404 |
+| GET | `/api/productos` | Autenticado | 200 `[{ id, codigo, nombre, precio, stock, marca, categoria }]` (solo productos activos) · 401 |
+| GET | `/api/productos/{id}` | Autenticado | Ficha del producto: descripción, garantía, especificaciones e ids de sus fotos · 404 |
+| GET | `/api/productos/{id}/imagenes/{imagenId}` | **Público** | La foto (JPG/PNG/WebP), con caché de 7 días · 404 |
+| DELETE | `/api/inventario/productos/{id}` | BODEGA, ADMIN | 204 · 400 si tiene ventas, compras o movimientos (hay que desactivarlo) |
+| POST/DELETE | `/api/inventario/productos/{id}/imagenes[/{imagenId}]` | BODEGA, ADMIN | Subir (multipart, campo `archivo`, hasta 2 MB y 5 por producto) o eliminar una foto; `POST .../{imagenId}/principal` la pone primera |
+| POST | `/api/pedidos` | VENDEDOR | 201 `{ numero, fecha, usuarioId, total, lineas[], serie, autorizacion, clienteNit, baseImponible, iva, ... }` · 400 · 401 · 403. Acepta `clienteId` (sin él: CF), `formaPago` (`EFECTIVO`, `TARJETA`, `TRANSFERENCIA`) y la entrega: `direccionEntrega`, `departamento` y `municipio` (validados contra `/api/geografia`) |
+| GET | `/api/geografia` | Autenticado | Los 22 departamentos de Guatemala con sus 340 municipios (para los selectores) |
+| GET | `/api/pipeline` | VENDEDOR (las suyas), ADMIN, CONTADOR, BODEGA | Tablero por etapas; cada tarjeta dice a qué etapa puede llevarla el usuario |
+| GET | `/api/pipeline/{id}` | Igual | Venta con su entrega e historial de etapas |
+| POST | `/api/pipeline/{id}/avanzar` | Según la etapa | `{ nota? }` → siguiente etapa · 400 si al rol no le toca o ya está entregada |
+| GET | `/api/pedidos?desde=&hasta=` | VENDEDOR (las suyas), ADMIN, CONTADOR | Facturas del rango (por defecto, el mes) |
+| GET | `/api/pedidos/{id}` | Dueño, ADMIN o CONTADOR | 200 · 401 · 404 |
+| GET/POST/PUT | `/api/clientes[/{id}]` | VENDEDOR, ADMIN | Buscar (`?buscar=` NIT o nombre), crear y editar · 400 NIT inválido o repetido |
+| GET/POST/PUT | `/api/inventario/productos[/{id}]` | Consulta: BODEGA, ADMIN, COMPRAS, CONTADOR · cambios: BODEGA, ADMIN | Existencias valorizadas (`?bajoMinimo=true`), alta y edición de productos |
+| GET | `/api/inventario/productos/{id}/kardex` | Igual que la consulta | Movimientos con saldo y costo promedio |
+| POST | `/api/inventario/ajustes` | BODEGA, ADMIN | Entrada o salida con motivo · 400 si no alcanza la existencia |
+| GET/POST/PUT | `/api/compras/proveedores[/{id}]` | Consulta: BODEGA, COMPRAS, ADMIN, CONTADOR · cambios: COMPRAS, ADMIN | Proveedores con NIT validado |
+| GET/POST | `/api/compras/ordenes[/{id}]` | Consulta: igual · crear: COMPRAS, ADMIN | Órdenes de compra (`?estado=PENDIENTE`) |
+| POST | `/api/compras/ordenes/{id}/recibir` | BODEGA, COMPRAS, ADMIN | `{ facturaProveedor }` → entra al inventario y se paga · 400 si ya no está pendiente |
+| POST | `/api/compras/ordenes/{id}/anular` | COMPRAS, ADMIN | Solo órdenes pendientes |
+| GET/POST/PUT | `/api/contabilidad/cuentas[/{id}]` | CONTADOR, ADMIN | Catálogo con saldos; las cuentas del sistema no se desactivan |
+| GET/POST | `/api/contabilidad/partidas[/{id}]` | CONTADOR, ADMIN | Libro diario (`?desde=&hasta=&origen=`) y partidas manuales · 400 si no cuadran |
+| GET | `/api/contabilidad/reportes/{mayor/{cuentaId} \| balance-comprobacion \| estado-resultados \| balance-general}` | CONTADOR, ADMIN | Libro mayor y estados financieros (`?desde=&hasta=`; balance general `?al=`) |
+| GET | `/api/panel` | ADMIN, BODEGA, COMPRAS, CONTADOR | Indicadores del inicio |
+| GET | `/api/reportes/ventas?desde=&hasta=` | VENDEDOR (las suyas), ADMIN, CONTADOR | Resumen con utilidad, margen y ticket promedio, comparación con el período anterior, y ventas por día, producto, categoría, vendedor, cliente y forma de pago |
+| GET | `/api/reportes/pronostico?desde=&hasta=` | VENDEDOR (las suyas), ADMIN, CONTADOR | Pronóstico según el pipeline: por etapa total × probabilidad de cierre, cerrado vs. pronóstico, tendencia por día/semana/mes y por vendedor |
+| PUT | `/api/reportes/pronostico/probabilidades` | ADMIN | `{ etapas: [{ estado, probabilidad }] }` las seis etapas, 0–100 %, sin bajar de una etapa a la siguiente y Entregado en 100 % |
 
 Todos los errores tienen el mismo formato: `{ "error": "mensaje legible" }`.
 
 ### Pruebas automatizadas
 
 ```bash
-cd backend && dotnet test      # 23 pruebas (1 se omite si no hay SQL Server; ver abajo)
-cd frontend && flutter test    # 28 pruebas
+cd backend && dotnet test      # 181 pruebas; con SQL Server (ver abajo) se suman las HTTP: 365 en total
+cd frontend && flutter test    # 486 pruebas
 ```
 
 - **Backend:** usa SQLite en memoria, que a diferencia del proveedor InMemory de EF soporta transacciones reales, `ExecuteUpdate` y *check constraints*. Cubre: precio/total calculados en el servidor aunque el cliente los envíe; descuento de stock; rollback completo si una línea falla; última unidad vendida una sola vez; cantidad ≤ 0; producto inexistente; producto duplicado; pedido vacío; pedido ajeno no visible; y login válido/inválido.
-- **Concurrencia real contra SQL Server:** la prueba lanza 20 pedidos simultáneos por la última unidad. Se activa definiendo `PEDIDOS_TEST_SQLSERVER` con una cadena de conexión (usuario con permiso para crear bases), por ejemplo `Server=.\SQLEXPRESS;Trusted_Connection=True;TrustServerCertificate=True`.
-- **Frontend:** repositorio de pedidos (envía solo `productoId` y `cantidad` con `Bearer`, usa el total del servidor y maneja 400 y 401), carrito (subtotal referencial y **doble clic = un solo pedido**) y widget de catálogo (producto sin stock deshabilitado). Además, **pruebas de layout responsive**: login, catálogo, carrito y comprobante se renderizan a 320, 375, 768, 1366 y 1920 px, y cualquier desborde hace fallar la prueba.
+- **Contra la API real y SQL Server** (`backend/tests/Pedidos.Tests/Http/`): se activan definiendo `PEDIDOS_TEST_SQLSERVER` con una cadena de conexión de un usuario que pueda crear bases, por ejemplo `Server=.\SQLEXPRESS;Trusted_Connection=True;TrustServerCertificate=True`. La prueba crea una base temporal (y la borra al terminar) y arranca la API compilada como proceso, en modo producción. El correo y el servicio de contraseñas filtradas se simulan con servidores locales, así no se depende de internet. Cada cliente HTTP sale de su propia IP de loopback (`127.0.0.x`), para que los límites por IP no se mezclen entre pruebas. Cubren:
+  - **Permisos:** cada endpoint × cada rol y sin sesión. Una prueba con reflexión falla si se agrega un endpoint sin revisar sus permisos.
+  - **Sesiones:** tokens firmados con otra clave, vencidos, alterados, `alg: none`, de otro emisor o audiencia; el token del primer paso del login usado como sesión; cierre de sesiones al cambiar contraseña, rol o desactivar.
+  - **Entradas:** JSON roto o con tipos incorrectos, listas con `null`, cuerpos y URL gigantes, inyección SQL y comodines en búsquedas, HTML/XSS, fechas inválidas, archivos que no son imagen, cabeceras de seguridad, CORS y Swagger oculto.
+  - **Flujos completos entre roles:** venta por todo el pipeline con inventario, partida contable y reportes; compra con costo promedio; invitación y recuperación por correo; ajustes; fotos.
+  - **Concurrencia real:** últimas unidades, la misma venta movida por dos personas, la misma orden recibida dos veces, ajustes simultáneos y registros duplicados.
+  - **Límites contra abuso:** login, recuperación, ventas por usuario, límite global y bloqueo por fuerza bruta.
+- **Frontend:** repositorio de pedidos (envía solo `productoId` y `cantidad` con `Bearer`, usa el total del servidor y maneja 400 y 401), carrito (subtotal referencial y **doble clic = un solo pedido**) y widget de catálogo (producto sin stock deshabilitado). Además, **pruebas de layout responsive**: login, catálogo, carrito y comprobante se renderizan a 320, 375, 768, 1366 y 1920 px, y cualquier desborde hace fallar la prueba. **Escenarios de error en todas las pantallas** del menú y de detalle: 500 con y sin mensaje, 502 en HTML de un proxy, sin conexión, 200 con HTML o con datos en otro formato, 403, 429, 401 (vuelve al login), carga lenta y respuesta tardía tras salir de la pantalla. En cada caso la pantalla explica qué pasó y ofrece **Reintentar**. También el login con el servidor caído y los formularios rechazados por el servidor (no se pierde lo escrito y no hay doble envío).
 
 ---
 
@@ -216,6 +271,67 @@ Verificado contra el stack en Docker:
 
 ---
 
+## 5 bis. Login de ERP (fuera del alcance del PDF)
+
+Extensión opcional. Todas las piezas son gratuitas y funcionan con `docker compose up`, sin cuentas externas.
+
+| Función | Cómo funciona | Por qué así |
+|---|---|---|
+| **Inicio de sesión con correo** | El correo se normaliza a minúsculas; mismo mensaje genérico si el correo o la contraseña fallan. | No revela qué cuentas existen. |
+| **2FA con Google Authenticator (TOTP, RFC 6238)** | QR generado en el navegador (`qr_flutter`) y verificación con Otp.NET. Tolera ±30 s de desfase de reloj y **rechaza reutilizar** un código ya aceptado. | Estándar abierto y gratuito, funciona sin conexión y no depende de redes de telefonía (evita el robo de SMS por *SIM swapping*). |
+| **Configuración obligatoria en el primer ingreso** | Ningún usuario (vendedor o administrador) puede entrar sin la app hasta configurarla: tras la contraseña, el login devuelve el QR (método `CONFIGURAR`) y el primer código de la app activa el 2FA y abre la sesión. | El 2FA obligatorio no depende de que el usuario "se acuerde" de activarlo. |
+| **Códigos de respaldo** | 10 códigos `XXXXX-XXXXX` de un solo uso. Se muestran una vez y se guardan solo como HMAC. | Si el usuario pierde el teléfono no queda fuera de su cuenta. |
+| **Desafío de 2FA** | Tras la contraseña se emite un JWT de 5 minutos con **otra audiencia**, que nunca sirve como sesión. Máximo 5 códigos por desafío, un solo uso, y se invalida si la contraseña cambia. | La contraseña correcta sola no da acceso. |
+| **"Confiar en este dispositivo"** | Token aleatorio de 30 días en `flutter_secure_storage`; en la BD solo su HMAC. Se revoca al cambiar la contraseña. | Menos fricción sin perder control. |
+| **2FA obligatorio para todos** | Nadie puede desactivarlo; solo reconfigurarlo en otro teléfono. | Todas las cuentas quedan protegidas aunque se filtre una contraseña. |
+| **Recuperación de contraseña** | Enlace de un solo uso que vence en 30 min. Pedir uno nuevo invalida el anterior. La respuesta es idéntica exista o no el correo, y el envío va por una cola en segundo plano, así que el tiempo tampoco lo delata. | Buenas prácticas de OWASP para restablecer contraseñas. |
+| **Cierre de sesiones al cambiar la contraseña** | El JWT lleva una "versión de sesión"; al restablecer o cambiar la contraseña (o desactivar el 2FA) sube la versión y los tokens anteriores dejan de valer. | Si la contraseña se filtró, el atacante pierde el acceso de inmediato. |
+| **Política de contraseñas** | Mínimo 12 caracteres, que no contenga el correo ni sea repetitiva, y **que no esté filtrada**: consulta gratuita a *Pwned Passwords* con k-anonimato (solo se envían 5 caracteres del SHA-1). Si el servicio no responde, se permite continuar. | Lo que recomienda hoy el NIST (SP 800-63B), en lugar de reglas de composición. |
+| **Aviso de dispositivo nuevo** | Correo cuando se inicia sesión desde un navegador o sistema no visto antes para ese usuario. | El usuario detecta accesos que no reconoce. |
+| **Bitácora de accesos** | Registra logins, fallos, bloqueos, 2FA, recuperaciones y cambios de seguridad, con IP y dispositivo. El usuario ve su actividad y el ADMIN ve la de todos. | Auditoría. |
+| **Secretos cifrados** | El secreto TOTP se guarda con AES-256-GCM. Claves derivadas por HKDF de `SEGURIDAD_CLAVE_MAESTRA`. | Una copia filtrada de la BD no permite generar códigos. |
+| **Aviso de Bloq Mayús y "recordar mi correo"** | Solo en el frontend; nunca se guarda la contraseña. | Comodidad. |
+| **Administración de usuarios (solo ADMIN)** | Nombre, apellido, teléfono (8 dígitos de Guatemala; se guarda como `+502XXXXXXXX`), correo y código corporativo únicos, rol y estado. **El administrador no define contraseñas:** al crear el usuario se envía una invitación de 48 h para que la cree él mismo. Desactivar corta sus sesiones al instante. Un usuario con pedidos no se elimina, se desactiva. El admin no puede desactivarse ni eliminarse a sí mismo y siempre queda al menos un administrador activo. Todo usuario nuevo configura Google Authenticator en su primer ingreso. | Separación de funciones y trazabilidad: cada alta, cambio o baja queda en la bitácora con el administrador que la hizo. |
+
+---
+
+## 5 ter. ERP: ventas, inventario, compras y contabilidad (fuera del alcance del PDF)
+
+Cada rol ve solo sus módulos (menú **Módulos** en la barra superior). El vendedor empieza en el catálogo; los demás, en un **panel** con ventas del día y del mes, utilidad bruta, valor del inventario, órdenes pendientes y productos por reabastecer.
+
+| Módulo | Qué hace | Reglas importantes |
+|---|---|---|
+| **Ventas** | Venta de contado a un cliente (NIT) o a consumidor final (CF), con **factura simulada** (serie A, número y autorización). | Precios con **IVA 12 % incluido**: el sistema separa la base y el IVA y la suma siempre da el total exacto. Forma de pago: efectivo (Caja) o tarjeta/transferencia (Bancos). |
+| **Clientes y proveedores** | Altas, búsqueda por NIT o nombre, activar o desactivar. | El **NIT se valida con su dígito verificador** (módulo 11; el 10 se escribe K) y es único. "CF" es del sistema. |
+| **Entrega y pipeline** | Cada venta lleva dirección, **departamento y municipio** (selectores; el municipio depende del departamento) y pasa por etapas: **Nuevo → Revisado → Autorizado → Despachado → En camino → Entregado/cobrado**. Tablero tipo kanban con el botón de la siguiente etapa, línea de tiempo en el detalle y alerta de ventas con 2 o más días en una etapa. | Cada etapa la mueve su rol: el vendedor revisa (solo las suyas), administración o contabilidad autoriza y bodega despacha, envía y entrega. Solo se avanza un paso a la vez, con cambio condicional (dos personas no la mueven a la vez) y queda historial con quién, cuándo y una nota. |
+| **Mapa de ventas** | En Reportes de ventas: mapa de Guatemala coloreado por ventas de cada departamento; al pasar el mouse o tocar uno muestra ventas, facturas, unidades y el **producto más vendido** ahí. También la distribución de las ventas por etapa. | Límites de geoBoundaries / OpenStreetMap (ODbL, créditos en `frontend/assets/mapas/CREDITOS.md`). |
+| **Reportes de ventas** | Ventas, facturas, ticket promedio, utilidad bruta y margen, IVA cobrado; variación contra el período anterior; ventas por día; ranking por producto, categoría, vendedor, cliente y forma de pago con su participación. Períodos rápidos: hoy, semana, mes, mes anterior y año. | El vendedor ve solo sus ventas. La utilidad se calcula sin IVA con el costo promedio de cada venta. |
+| **Pipeline y pronóstico** | Área **Reportes** del menú. Cada etapa tiene una probabilidad de cierre (inicial: Nuevo 10 %, Revisado 25 %, Autorizado 50 %, Despachado 75 %, En camino 90 %, Entregado 100 %); lo **esperado** de una etapa es su total × su probabilidad y el **pronóstico** es lo cerrado (entregado) más lo esperado de las abiertas. Gráficas: cerrado vs. pronóstico vs. todo el pipeline, embudo, total vs. esperado por etapa y tendencia; tabla del cálculo y pronóstico por vendedor. | El administrador ajusta las probabilidades (queda quién y cuándo). El vendedor ve solo su pronóstico. Se agrupa por día hasta 31 días, por semana hasta 120 y por mes en adelante. |
+| **Productos (CRUD) y fotos** | Alta, edición de la ficha, hasta **5 fotos** por producto (subir, elegir la principal, eliminar), activar/desactivar y eliminar. En la ficha, las fotos se ven en un **carrusel** que avanza solo (se pausa con el mouse encima; flechas, puntos y miniaturas). El catálogo abre con un carrusel de **destacados**. | El formato se valida por la firma de los bytes (no por la extensión). Solo se elimina un producto sin ventas, compras ni movimientos; si ya tiene historia se desactiva. Las 25 fotos de ejemplo son de Wikimedia Commons con licencias libres (créditos en `db/init/imagenes/CREDITOS.md`). |
+| **Ficha del producto** | Marca, categoría, descripción detallada (con párrafos), garantía y especificaciones técnicas. En el catálogo, tocar la foto o el nombre abre la ficha; también se filtra por categoría. | Se edita desde Inventario (BODEGA/ADMIN). Hasta 2000 caracteres de descripción y 20 especificaciones sin nombres repetidos. |
+| **Inventario** | Productos, existencias valorizadas, stock mínimo, **kardex** y ajustes (conteo físico, daño, sobrante). | **Costo promedio ponderado**: cada entrada lo recalcula en el mismo `UPDATE` que suma la existencia, así dos operaciones simultáneas no dejan un costo incorrecto. La existencia solo cambia con movimientos: no se edita a mano. |
+| **Compras** | Órdenes de compra a proveedores (costos sin IVA) → **recepción en bodega** con la factura del proveedor → pago de contado desde Bancos. | La recepción es condicional (`WHERE Estado = 'PENDIENTE'`): si dos personas reciben la misma orden a la vez, solo una lo logra y el inventario no se duplica. |
+| **Contabilidad** | Catálogo de cuentas, **libro diario**, partidas manuales, **libro mayor**, balance de comprobación, estado de resultados y balance general. | Cada venta, compra y ajuste genera su **partida automática en la misma transacción**: si algo falla no queda nada a medias. Toda partida debe cuadrar (debe = haber); la BD además impide líneas con debe y haber a la vez. |
+
+**Partidas automáticas**
+
+| Operación | Debe | Haber |
+|---|---|---|
+| Venta | Caja o Bancos (total) · Costo de ventas (costo) | Ventas (base sin IVA) · IVA por pagar · Inventario (costo) |
+| Recepción de compra | Inventario (subtotal) · IVA por cobrar | Bancos (total) |
+| Ajuste de salida | Faltantes y mermas de inventario | Inventario |
+| Ajuste de entrada | Inventario | Otros ingresos |
+
+**Apertura.** Al migrar, `init.sql` da un costo inicial a los productos que no lo tienen, registra la existencia en el kardex (`INICIAL`) y crea la **partida de apertura** (Q100,000 en Bancos más el inventario, contra Capital). Así inventario y contabilidad arrancan cuadrados. Las ventas anteriores al ERP quedan asignadas a CF y sin partida.
+
+**Datos de demostración.** Con `DEMO_GENERAR=true` (valor por defecto en Docker), la API genera al arrancar por primera vez 20 productos más, 24 clientes repartidos por el país, 3 vendedores y **120 días de operación**: compras semanales recibidas en bodega, unas 750 ventas con entrega, su avance por el pipeline, gastos fijos mensuales y depósitos semanales. Todo se registra con los mismos servicios de la app, así que inventario, kardex y contabilidad quedan cuadrados. Tarda 1 a 2 minutos en segundo plano y no se repite (busca el producto `P-006`). Los vendedores generados no tienen contraseña: el administrador puede enviarles la invitación.
+
+**Probarlo:**
+1. Entra como **compras** y crea una orden.
+2. Entra como **bodega** y recíbela: mira el kardex y el nuevo costo promedio.
+3. Entra como **vendedor**, vende a un cliente con NIT y revisa la factura.
+4. Entra como **contador**: la venta y la compra ya están en el libro diario, y el balance general cuadra.
+
 ## 6. Pendiente y posibles mejoras
 
 | Tema | Estado y cómo se resolvería |
@@ -228,6 +344,11 @@ Verificado contra el stack en Docker:
 | Rate limit distribuido | Los límites y el bloqueo de cuentas son en memoria (por instancia). Con varias réplicas irían en Redis o en el gateway. |
 | Observabilidad | Logs estructurados y *health checks* de dependencias (`/health` hoy no consulta la BD). |
 | Paginación del catálogo | No hace falta con 5 productos; con catálogos grandes: `?page=&size=` y búsqueda. |
+| ERP: anular ventas | Hoy una factura no se anula. Se haría con una nota de crédito que devuelva la existencia y registre la partida inversa. |
+| ERP: crédito | Ventas y compras son de contado. Al crédito se agregarían cuentas por cobrar y por pagar, abonos y antigüedad de saldos. |
+| ERP: FEL real | La factura es una simulación. En producción se certificaría con un certificador autorizado por la SAT (XML firmado, UUID oficial). |
+| ERP: cierre contable | No hay cierre de período: el resultado del ejercicio se acumula en el balance general. Se agregaría el cierre mensual o anual, que traslada la utilidad a resultados acumulados y bloquea el período. |
+| ERP: recepción parcial | Una orden se recibe completa. Para recibirla por partes haría falta registrar la cantidad recibida por línea. |
 
 ---
 

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_shell.dart';
+import 'recuperar_password_screen.dart';
 import 'session_controller.dart';
 
 class LoginScreen extends StatelessWidget {
@@ -79,10 +81,13 @@ class _PanelMarca extends StatelessWidget {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
+            // Mismo tono que la barra de navegación del ERP, con un toque del azul de marca.
             colors: [
-              AppColors.primary.withValues(alpha: 0.74),
-              AppColors.primaryDark.withValues(alpha: 0.90),
+              AppColors.navbar.withValues(alpha: 0.88),
+              AppColors.primaryDark.withValues(alpha: 0.80),
+              AppColors.primary.withValues(alpha: 0.62),
             ],
+            stops: const [0, 0.6, 1],
           ),
         ),
         child: _cuerpo(theme, blanco70),
@@ -151,20 +156,39 @@ class _FormularioLogin extends StatefulWidget {
 
 class _FormularioLoginState extends State<_FormularioLogin> {
   final _formKey = GlobalKey<FormState>();
-  final _usuario = TextEditingController();
+  final _email = TextEditingController();
   final _password = TextEditingController();
   bool _ocultarPassword = true;
+  bool _recordar = false;
+  bool _mayusculas = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final recordado = context.read<SessionController>().emailRecordado;
+    if (recordado != null) {
+      _email.text = recordado;
+      _recordar = true;
+    }
+  }
 
   @override
   void dispose() {
-    _usuario.dispose();
+    _email.dispose();
     _password.dispose();
     super.dispose();
   }
 
   void _enviar() {
     if (!_formKey.currentState!.validate()) return;
-    context.read<SessionController>().login(_usuario.text, _password.text);
+    context.read<SessionController>().login(_email.text, _password.text, recordar: _recordar);
+  }
+
+  /// Aviso de Bloq Mayús: se revisa en cada tecla mientras se escribe la contraseña.
+  KeyEventResult _alTeclear(FocusNode _, KeyEvent _) {
+    final activo = HardwareKeyboard.instance.lockModesEnabled.contains(KeyboardLockMode.capsLock);
+    if (activo != _mayusculas) setState(() => _mayusculas = activo);
+    return KeyEventResult.ignored;
   }
 
   @override
@@ -182,49 +206,94 @@ class _FormularioLoginState extends State<_FormularioLogin> {
             if (estrecho) ...[const Align(alignment: Alignment.centerLeft, child: BrandLogo()), const SizedBox(height: 40)],
             Text('Iniciar sesión', style: theme.textTheme.headlineSmall),
             const SizedBox(height: 6),
-            Text('Ingresa tus credenciales para continuar.',
+            Text('Ingresa con tu correo corporativo.',
                 style: theme.textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary)),
             const SizedBox(height: 32),
-            const _Etiqueta('Usuario'),
+            const _Etiqueta('Correo electrónico'),
             TextFormField(
-              controller: _usuario,
-              enabled: !session.loggingIn,
-              autofillHints: const [AutofillHints.username],
+              controller: _email,
+              enabled: !session.procesando,
+              keyboardType: TextInputType.emailAddress,
+              autofillHints: const [AutofillHints.email, AutofillHints.username],
               textInputAction: TextInputAction.next,
               decoration: const InputDecoration(
-                hintText: 'Tu nombre de usuario',
-                prefixIcon: Icon(Icons.person_outline),
+                hintText: 'nombre@empresa.com',
+                prefixIcon: Icon(Icons.mail_outline),
               ),
-              validator: (v) => (v == null || v.trim().isEmpty) ? 'Ingresa tu usuario' : null,
+              validator: (v) {
+                final t = v?.trim() ?? '';
+                if (t.isEmpty) return 'Ingresa tu correo';
+                if (!t.contains('@') || t.contains(' ')) return 'Ingresa un correo válido';
+                return null;
+              },
             ),
             const SizedBox(height: 18),
             const _Etiqueta('Contraseña'),
-            TextFormField(
-              controller: _password,
-              enabled: !session.loggingIn,
-              obscureText: _ocultarPassword,
-              autofillHints: const [AutofillHints.password],
-              onFieldSubmitted: (_) => _enviar(),
-              decoration: InputDecoration(
-                hintText: 'Tu contraseña',
-                prefixIcon: const Icon(Icons.lock_outline),
-                suffixIcon: IconButton(
-                  tooltip: _ocultarPassword ? 'Mostrar' : 'Ocultar',
-                  icon: Icon(_ocultarPassword ? Icons.visibility_outlined : Icons.visibility_off_outlined),
-                  onPressed: () => setState(() => _ocultarPassword = !_ocultarPassword),
+            Focus(
+              onKeyEvent: _alTeclear,
+              child: TextFormField(
+                controller: _password,
+                enabled: !session.procesando,
+                obscureText: _ocultarPassword,
+                autofillHints: const [AutofillHints.password],
+                onFieldSubmitted: (_) => _enviar(),
+                decoration: InputDecoration(
+                  hintText: 'Tu contraseña',
+                  prefixIcon: const Icon(Icons.lock_outline),
+                  suffixIcon: IconButton(
+                    tooltip: _ocultarPassword ? 'Mostrar' : 'Ocultar',
+                    icon: Icon(_ocultarPassword ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+                    onPressed: () => setState(() => _ocultarPassword = !_ocultarPassword),
+                  ),
+                ),
+                validator: (v) => (v == null || v.isEmpty) ? 'Ingresa tu contraseña' : null,
+              ),
+            ),
+            if (_mayusculas)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Row(
+                  key: const Key('aviso-mayusculas'),
+                  children: [
+                    const Icon(Icons.keyboard_capslock, size: 16, color: AppColors.warning),
+                    const SizedBox(width: 6),
+                    Text('Bloq Mayús está activado',
+                        style: theme.textTheme.bodySmall?.copyWith(color: AppColors.warning)),
+                  ],
                 ),
               ),
-              validator: (v) => (v == null || v.isEmpty) ? 'Ingresa tu contraseña' : null,
+            const SizedBox(height: 8),
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              runSpacing: 4,
+              children: [
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 260),
+                  child: Casilla(
+                    valor: _recordar,
+                    alCambiar: session.procesando ? null : (v) => setState(() => _recordar = v),
+                    texto: 'Recordar mi correo',
+                  ),
+                ),
+                TextButton(
+                  onPressed: session.procesando
+                      ? null
+                      : () => Navigator.of(context).push(MaterialPageRoute(
+                          builder: (_) => RecuperarPasswordScreen(emailInicial: _email.text.trim()))),
+                  child: const Text('¿Olvidaste tu contraseña?'),
+                ),
+              ],
             ),
             if (session.error != null) ...[
-              const SizedBox(height: 20),
+              const SizedBox(height: 12),
               InlineBanner.error(session.error!, key: const Key('login-error')),
             ],
-            const SizedBox(height: 28),
+            const SizedBox(height: 20),
             FilledButton(
               style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-              onPressed: session.loggingIn ? null : _enviar,
-              child: session.loggingIn
+              onPressed: session.procesando ? null : _enviar,
+              child: session.procesando
                   ? const SizedBox.square(
                       dimension: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                   : const Text('Ingresar'),

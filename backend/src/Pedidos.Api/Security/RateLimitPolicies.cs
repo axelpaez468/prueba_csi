@@ -10,6 +10,28 @@ public static class RateLimitPolicies
     /// <summary>Limita la creación de pedidos por usuario (evita saturar la BD con transacciones).</summary>
     public const string CrearPedido = "crear-pedido";
 
+    /// <summary>Verificación y gestión del 2FA (además del tope de intentos por código/desafío).</summary>
+    public const string SegundoFactor = "segundo-factor";
+
+    /// <summary>"Olvidé mi contraseña": evita usar el sistema para bombardear bandejas de correo.</summary>
+    public const string Recuperacion = "recuperacion";
+
+    public static RateLimitPartition<string> PorIpSegundoFactor(HttpContext http) =>
+        RateLimitPartition.GetFixedWindowLimiter(ClienteIp(http), _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 30,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0
+        });
+
+    public static RateLimitPartition<string> PorIpRecuperacion(HttpContext http) =>
+        RateLimitPartition.GetFixedWindowLimiter(ClienteIp(http), _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 5,
+            Window = TimeSpan.FromMinutes(15),
+            QueueLimit = 0
+        });
+
     /// <summary>Límite global por IP para cualquier endpoint (primera barrera ante floods).</summary>
     public static RateLimitPartition<string> Global(HttpContext http) =>
         RateLimitPartition.GetFixedWindowLimiter(ClienteIp(http), _ => new FixedWindowRateLimiterOptions
@@ -41,5 +63,6 @@ public static class RateLimitPolicies
 
     // Si la API se publica detrás de un proxy, se debe configurar ForwardedHeaders con la IP del proxy
     // como confiable; de lo contrario todas las peticiones compartirían la IP del proxy.
-    private static string ClienteIp(HttpContext http) => http.Connection.RemoteIpAddress?.ToString() ?? "desconocida";
+    private static string ClienteIp(HttpContext http) =>
+        Pedidos.Api.Services.Seguridad.ContextoCliente.IpDe(http) ?? "desconocida";
 }

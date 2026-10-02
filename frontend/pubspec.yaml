@@ -7,12 +7,16 @@ environment:
   sdk: ^3.13.4
 
 dependencies:
+  file_picker: ^13.1.0
   flutter:
+    sdk: flutter
+  flutter_localizations:
     sdk: flutter
   flutter_secure_storage: ^11.2.0
   http: ^1.6.0
   intl: ^0.20.3
   provider: ^6.1.5+1
+  qr_flutter: ^4.1.0
 
 dev_dependencies:
   flutter_test:
@@ -24,3 +28,4 @@ flutter:
   assets:
     - assets/productos/
     - assets/fondos/
+    - assets/mapas/

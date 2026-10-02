@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.Data.SqlClient;
+using Microsoft.EntityFrameworkCore;
 
 namespace Pedidos.Api.Errors;
 
@@ -17,6 +19,14 @@ public class GlobalExceptionHandler : IExceptionHandler
         var (status, mensaje) = exception switch
         {
             BusinessRuleException e => (StatusCodes.Status400BadRequest, e.Message),
+            // Dos personas guardan lo mismo a la vez (mismo NIT, código o correo): las validaciones de ambas pasaron,
+            // pero el índice único de la BD solo deja entrar a una. La otra recibe un mensaje claro, no un 500.
+            DbUpdateException { InnerException: SqlException { Number: 2601 or 2627 } } =>
+                (StatusCodes.Status409Conflict, "Ya existe un registro con esos datos (alguien lo guardó al mismo tiempo). Revisa la lista."),
+            // SQL Server eligió esta operación como víctima de un bloqueo mutuo: reintentarla funciona.
+            DbUpdateException { InnerException: SqlException { Number: 1205 } } or SqlException { Number: 1205 } =>
+                (StatusCodes.Status409Conflict, "La operación coincidió con otra al mismo tiempo. Intenta de nuevo."),
+            NoEncontradoException e => (StatusCodes.Status404NotFound, e.Message),
             // Incluye 413 (cuerpo mayor al límite de Kestrel) y otros errores de protocolo.
             BadHttpRequestException e => (e.StatusCode, e.StatusCode == StatusCodes.Status413PayloadTooLarge
                 ? "La solicitud es demasiado grande."

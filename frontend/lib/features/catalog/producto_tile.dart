@@ -13,11 +13,15 @@ class ProductoTile extends StatefulWidget {
     required this.producto,
     required this.enCarrito,
     required this.onAgregar,
+    this.onVerDetalle,
   });
 
   final Producto producto;
   final int enCarrito;
   final void Function(int cantidad) onAgregar;
+
+  /// Abre la ficha del producto (tocar la foto o el nombre).
+  final VoidCallback? onVerDetalle;
 
   @override
   State<ProductoTile> createState() => _ProductoTileState();
@@ -42,7 +46,7 @@ class _ProductoTileState extends State<ProductoTile> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _Portada(producto: p),
+            InkWell(onTap: widget.onVerDetalle, child: _Portada(producto: p)),
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
@@ -53,7 +57,15 @@ class _ProductoTileState extends State<ProductoTile> {
                         style: theme.textTheme.labelSmall?.copyWith(
                             color: AppColors.textSecondary, letterSpacing: 0.6)),
                     const SizedBox(height: 2),
-                    Text(p.nombre, maxLines: 2, overflow: TextOverflow.ellipsis, style: theme.textTheme.titleMedium),
+                    InkWell(
+                      onTap: widget.onVerDetalle,
+                      child: Text(p.nombre, maxLines: 2, overflow: TextOverflow.ellipsis, style: theme.textTheme.titleMedium),
+                    ),
+                    if (p.marca != null || p.categoria != null)
+                      Text([?p.marca, ?p.categoria].join(' · '),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
                     const SizedBox(height: 8),
                     // Wrap: si no cabe en una línea, la etiqueta baja; el precio nunca se parte.
                     Wrap(
@@ -72,7 +84,13 @@ class _ProductoTileState extends State<ProductoTile> {
                       Text('${widget.enCarrito} en tu carrito',
                           style: theme.textTheme.bodySmall?.copyWith(color: AppColors.accent)),
                     ],
-                    const SizedBox(height: 14),
+                    if (widget.onVerDetalle != null)
+                      TextButton(
+                        style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(0, 32)),
+                        onPressed: widget.onVerDetalle,
+                        child: const Text('Ver detalle y especificaciones'),
+                      ),
+                    const SizedBox(height: 6),
                     const Spacer(),
                     Row(
                       children: [
